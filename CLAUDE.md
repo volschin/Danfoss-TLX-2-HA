@@ -6,11 +6,12 @@ This document describes the codebase structure, conventions, and development wor
 
 ## Project Overview
 
-**Danfoss-TLX-2-HA** is a Python-based Home Assistant integration for Danfoss TLX Pro solar inverters. It communicates with the inverter via the proprietary **EtherLynx UDP protocol** (port 48004) and bridges inverter data to Home Assistant using either MQTT auto-discovery or command-line sensors.
+**Danfoss-TLX-2-HA** is a Python-based Home Assistant integration for Danfoss TLX Pro solar inverters. It communicates with the inverter via the proprietary **EtherLynx UDP protocol** (port 48004) and exposes inverter data as native HA sensor entities via a HACS-compatible custom component.
 
 **License**: MIT
 **Language**: Python 3.9+
 **Documentation language**: German (comments, README, docstrings)
+**HACS**: Yes — install via Home Assistant Community Store
 
 ---
 
@@ -18,22 +19,68 @@ This document describes the codebase structure, conventions, and development wor
 
 ```
 Danfoss-TLX-2-HA/
-├── danfoss_etherlynx.py        # Core UDP protocol library (38KB)
-├── danfoss_ha_bridge.py        # Home Assistant bridge daemon (14KB)
-├── danfoss_config.yaml         # User configuration template
-├── configuration.yaml          # Home Assistant sensor/automation examples
-├── danfoss_etherlynx.service   # systemd service unit file
-├── README.md                   # User documentation (German)
-├── LICENSE                     # MIT License
-├── .gitignore                  # Standard Python gitignore
+├── hacs.json                        # HACS metadata (name, render_readme)
+├── custom_components/
+│   └── danfoss_tlx/                 # HA custom component (HACS install target)
+│       ├── __init__.py              # Integration setup / entry point
+│       ├── manifest.json            # HA integration metadata
+│       ├── const.py                 # Shared constants (DOMAIN, CONF_* keys)
+│       ├── config_flow.py           # UI config flow + options flow
+│       ├── coordinator.py           # DataUpdateCoordinator (polls inverter)
+│       ├── sensor.py                # SensorEntity subclasses
+│       ├── strings.json             # German UI strings
+│       ├── etherlynx.py             # EtherLynx protocol library (copied from root)
+│       └── translations/
+│           └── en.json              # English UI translations
+├── danfoss_etherlynx.py             # Standalone protocol library (also used as etherlynx.py)
+├── danfoss_ha_bridge.py             # Legacy MQTT bridge daemon (kept for reference)
+├── danfoss_config.yaml              # Legacy MQTT bridge configuration template
+├── configuration.yaml               # HA sensor/automation examples (legacy)
+├── danfoss_etherlynx.service        # systemd service unit (legacy MQTT daemon)
+├── README.md                        # User documentation (German)
+├── CLAUDE.md                        # This file
+├── LICENSE                          # MIT License
+├── .gitignore                       # Standard Python gitignore
 └── ComLynx and EtherLynx User Guide.pdf  # Official Danfoss protocol spec
 ```
 
-No build system, test framework, or CI/CD pipeline is present. The project is deployed as plain Python scripts.
+**Primary integration path**: HACS installs `custom_components/danfoss_tlx/` into Home Assistant.
+**Legacy path**: The MQTT bridge (`danfoss_ha_bridge.py` + systemd service) remains for users who cannot use HACS.
 
 ---
 
 ## Key Files
+
+### HACS Custom Component (`custom_components/danfoss_tlx/`)
+
+#### `__init__.py`
+Integration entry point. Calls `async_setup_entry` and `async_unload_entry`. Registers the `sensor` platform and sets up a listener to reload when options change.
+
+#### `manifest.json`
+HA integration manifest. Required fields: `domain`, `name`, `version`, `iot_class`, `config_flow`, `codeowners`, `documentation`, `issue_tracker`. No external `requirements` — the protocol library is stdlib-only.
+
+#### `const.py`
+All shared constants: `DOMAIN = "danfoss_tlx"`, `CONF_*` config keys, default values.
+
+#### `config_flow.py`
+- `DanfossConfigFlow` — user-facing setup: collects inverter IP, optional serial, PV string count, poll interval; verifies connectivity via a background thread call to `DanfossEtherLynx.discover()`
+- `DanfossOptionsFlow` — edit poll interval and PV string count post-setup
+
+#### `coordinator.py`
+`DanfossCoordinator(DataUpdateCoordinator)` — polls the inverter on a configurable interval. Runs `DanfossEtherLynx.read_all()` in an executor thread. Handles auto-discovery of serial on first connect, resets the client on consecutive failures so the next poll retriggers discovery.
+
+#### `sensor.py`
+- `DanfossSensor` — one per entry in `TLX_PARAMETERS`; omits PV string 3 sensors when `pv_strings == 2`
+- `DanfossOperationModeSensor` — maps numeric `operation_mode` to a human-readable German text via `OPERATION_MODES`
+- All sensors share a single HA device entry keyed by `(DOMAIN, entry.entry_id)`
+
+#### `etherlynx.py`
+Verbatim copy of `danfoss_etherlynx.py` kept inside the component package so HACS installs a self-contained directory. Any changes to the protocol library must be mirrored in both files.
+
+#### `strings.json` / `translations/en.json`
+UI strings for the config flow and options flow. `strings.json` is German (primary); `translations/en.json` is English for the HA translation system.
+
+---
 
 ### `danfoss_etherlynx.py`
 The low-level protocol library. Everything needed to speak EtherLynx lives here.
@@ -217,9 +264,20 @@ When adding new parameters, follow this pattern exactly and include the Danfoss 
 ## Adding New Sensors
 
 1. Add a new `ParameterDef` entry to `TLX_PARAMETERS` in `danfoss_etherlynx.py`
-2. Verify the parameter ID, module ID, data type, and scaling factor against the PDF spec
-3. Add a corresponding entry to `configuration.yaml` if a template sensor or automation is needed
-4. Test with `--mode all` to confirm the raw value reads correctly
+2. Mirror the identical change in `custom_components/danfoss_tlx/etherlynx.py`
+3. Verify the parameter ID, module ID, data type, and scaling factor against the PDF spec
+4. Test with `python3 danfoss_etherlynx.py <ip> --mode all` to confirm the raw value reads correctly
+5. The HACS sensor platform picks it up automatically — no changes to `sensor.py` needed
+
+---
+
+## Installing via HACS
+
+1. In HACS → Integrations → ⋮ → Custom repositories → add this repo URL, category: Integration
+2. Install "Danfoss TLX Pro"
+3. Restart Home Assistant
+4. Settings → Devices & Services → Add Integration → search "Danfoss TLX Pro"
+5. Enter inverter IP, optionally serial, PV string count, poll interval
 
 ---
 

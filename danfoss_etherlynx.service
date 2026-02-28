@@ -1,0 +1,54 @@
+# =============================================================================
+# Danfoss TLX Pro EtherLynx Bridge - systemd Service
+# =============================================================================
+# Installation:
+#   1. Kopiere diese Datei nach /etc/systemd/system/danfoss_etherlynx.service
+#   2. Passe IP-Adresse und Pfade an
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable danfoss_etherlynx
+#   5. sudo systemctl start danfoss_etherlynx
+#
+# Status prüfen:
+#   sudo systemctl status danfoss_etherlynx
+#   sudo journalctl -u danfoss_etherlynx -f
+
+[Unit]
+Description=Danfoss TLX Pro EtherLynx to MQTT Bridge
+After=network-online.target mosquitto.service
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=homeassistant
+Group=homeassistant
+
+# Pfad zum Script anpassen!
+ExecStart=/usr/bin/python3 /config/scripts/danfoss_ha_bridge.py \
+    --mode mqtt \
+    --config /config/scripts/danfoss_config.yaml
+
+# Alternativ mit direkten Parametern (ohne YAML):
+# ExecStart=/usr/bin/python3 /config/scripts/danfoss_ha_bridge.py \
+#     --mode mqtt \
+#     --ip 192.168.1.100 \
+#     --mqtt-host localhost \
+#     --pv-strings 2
+
+WorkingDirectory=/config/scripts
+Restart=on-failure
+RestartSec=30
+
+# Umgebungsvariablen (Alternative zur YAML-Konfig)
+# Environment=DANFOSS_IP=192.168.1.100
+# Environment=MQTT_HOST=localhost
+# Environment=PV_STRINGS=2
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=danfoss_etherlynx
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,91 @@
+# =============================================================================
+
+# Danfoss TLX Pro EtherLynx Bridge - Konfiguration
+
+# =============================================================================
+
+# Kopiere diese Datei nach /config/scripts/danfoss_config.yaml
+
+# und passe die Werte an.
+
+# 
+
+# Alternativ können alle Werte auch per Umgebungsvariablen gesetzt werden
+
+# (siehe Kommentare).
+
+# ── Inverter-Einstellungen ─────────────────────────────────────────────────
+
+# IP-Adresse des Danfoss TLX Pro (muss statisch sein oder per DHCP reserviert)
+
+# Env: DANFOSS_IP
+
+inverter_ip: “192.168.1.100”
+
+# Seriennummer des Inverters (leer = automatische Erkennung per Ping)
+
+# Env: DANFOSS_SERIAL
+
+inverter_serial: “”
+
+# Anzahl der PV-Strings (2 für TLX 6k/8k, 3 für TLX 10k/12.5k/15k)
+
+# Env: PV_STRINGS
+
+pv_strings: 2
+
+# ── MQTT-Einstellungen (nur für mqtt-Modus) ────────────────────────────────
+
+# Env: MQTT_HOST
+
+mqtt_host: “localhost”
+
+# Env: MQTT_PORT
+
+mqtt_port: 1883
+
+# Env: MQTT_USER (leer = keine Authentifizierung)
+
+mqtt_user: “”
+
+# Env: MQTT_PASSWORD
+
+mqtt_password: “”
+
+# MQTT Topic-Prefix für Datenpunkte
+
+# Sensoren erscheinen als: danfoss_tlx/grid_power_total, etc.
+
+# Env: MQTT_TOPIC
+
+mqtt_topic_prefix: “danfoss_tlx”
+
+# MQTT Discovery Prefix für HA Auto-Discovery
+
+mqtt_discovery_prefix: “homeassistant”
+
+# ── Polling-Intervalle (Sekunden) ──────────────────────────────────────────
+
+# Echtzeit-Daten (Leistung, Spannung, Strom) - häufig
+
+# Env: POLL_REALTIME
+
+poll_interval_realtime: 15
+
+# Energie-Daten (kWh Zähler, Tagesproduktion) - mittel
+
+# Env: POLL_ENERGY
+
+poll_interval_energy: 300
+
+# Systemdaten (Firmware, Nennleistung) - selten
+
+poll_interval_system: 3600
+
+# ── Logging ────────────────────────────────────────────────────────────────
+
+# DEBUG, INFO, WARNING, ERROR
+
+# Env: LOG_LEVEL
+
+log_level: “INFO”

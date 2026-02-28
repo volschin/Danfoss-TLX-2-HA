@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Danfoss TLX Pro einrichten",
+        "description": "Verbindungsparameter für den Danfoss TLX Pro Wechselrichter eingeben. Die Seriennummer wird automatisch erkannt wenn das Feld leer gelassen wird.",
+        "data": {
+          "inverter_ip": "IP-Adresse des Wechselrichters",
+          "inverter_serial": "Seriennummer (optional, automatische Erkennung)",
+          "pv_strings": "Anzahl PV-Strings (2 oder 3)",
+          "scan_interval": "Abfrageintervall in Sekunden"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Wechselrichter fehlgeschlagen. Bitte IP-Adresse prüfen und sicherstellen, dass der Wechselrichter eingeschaltet und per Ethernet verbunden ist."
+    },
+    "abort": {
+      "already_configured": "Dieser Wechselrichter ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Danfoss TLX Pro Einstellungen",
+        "data": {
+          "scan_interval": "Abfrageintervall in Sekunden",
+          "pv_strings": "Anzahl PV-Strings (2 oder 3)"
+        }
+      }
+    }
+  }
+}

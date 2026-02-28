@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Danfoss TLX Pro",
+        "description": "Enter the connection parameters for your Danfoss TLX Pro inverter. Leave the serial number blank to auto-discover it.",
+        "data": {
+          "inverter_ip": "Inverter IP Address",
+          "inverter_serial": "Serial Number (optional, auto-detected)",
+          "pv_strings": "Number of PV Strings (2 or 3)",
+          "scan_interval": "Polling Interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the inverter. Please check the IP address and ensure the inverter is powered on and connected via Ethernet."
+    },
+    "abort": {
+      "already_configured": "This inverter is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Danfoss TLX Pro Options",
+        "data": {
+          "scan_interval": "Polling Interval (seconds)",
+          "pv_strings": "Number of PV Strings (2 or 3)"
+        }
+      }
+    }
+  }
+}

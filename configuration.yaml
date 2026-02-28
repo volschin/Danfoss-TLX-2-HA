@@ -1,0 +1,431 @@
+# =============================================================================
+
+# Danfoss TLX Pro - Home Assistant Konfiguration
+
+# =============================================================================
+
+# EtherLynx-Integration (UDP, kein ESP32/RS485 nötig!)
+
+# 
+
+# VARIANTE A: MQTT-Sensoren (empfohlen)
+
+# → Starte danfoss_ha_bridge.py –mode mqtt als Daemon
+
+# → HA erkennt Sensoren automatisch via MQTT Discovery
+
+# → Keine manuelle Sensor-Konfiguration nötig!
+
+# 
+
+# VARIANTE B: Command-Line-Sensoren (einfacher, kein MQTT nötig)
+
+# → HA ruft das Script direkt auf und liest JSON
+
+# → Konfiguration unten in configuration.yaml einfügen
+
+# 
+
+# Wähle EINE Variante. Variante A wird empfohlen.
+
+# =============================================================================
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+
+# ║  VARIANTE A: MQTT (empfohlen)                                           ║
+
+# ║  → Sensoren werden automatisch per MQTT Discovery angelegt              ║
+
+# ║  → Nur MQTT-Broker muss konfiguriert sein                               ║
+
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# MQTT Broker muss in HA eingerichtet sein (z.B. Mosquitto Add-on)
+
+# Dann nur den Daemon starten - keine Sensor-Konfiguration nötig!
+
+# 
+
+# Daemon starten:
+
+# python3 /config/scripts/danfoss_ha_bridge.py \
+
+# –mode mqtt \
+
+# –ip 192.168.1.100 \
+
+# –mqtt-host localhost
+
+# 
+
+# Als systemd-Service:
+
+# Siehe danfoss_etherlynx.service
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+
+# ║  VARIANTE B: Command-Line-Sensoren                                      ║
+
+# ║  → Kein MQTT nötig                                                       ║
+
+# ║  → HA ruft Script direkt auf                                             ║
+
+# ║  → Weniger Abhängigkeiten                                                ║
+
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+command_line:
+
+# ── Echtzeit-Sensor (alle 30 Sekunden) ─────────────────────────────────
+
+- sensor:
+  name: “Danfoss TLX Realtime”
+  unique_id: danfoss_tlx_realtime
+  command: >-
+  python3 /config/scripts/danfoss_ha_bridge.py
+  –ip 192.168.1.100
+  –mode realtime
+  scan_interval: 30
+  command_timeout: 10
+  json_attributes:
+  - grid_power_total
+  - grid_power_l1
+  - grid_power_l2
+  - grid_power_l3
+  - pv_voltage_1
+  - pv_voltage_2
+  - pv_current_1
+  - pv_current_2
+  - pv_power_1
+  - pv_power_2
+  - grid_voltage_l1
+  - grid_voltage_l2
+  - grid_voltage_l3
+  - grid_current_l1
+  - grid_current_l2
+  - grid_current_l3
+  - grid_frequency_avg
+  - grid_energy_today_total
+  - operation_mode
+  - operation_mode_text
+  - status
+  value_template: “{{ value_json.grid_power_total | default(0) }}”
+  unit_of_measurement: “W”
+  device_class: power
+  state_class: measurement
+
+# ── Energie-Sensor (alle 5 Minuten) ────────────────────────────────────
+
+- sensor:
+  name: “Danfoss TLX Energy”
+  unique_id: danfoss_tlx_energy
+  command: >-
+  python3 /config/scripts/danfoss_ha_bridge.py
+  –ip 192.168.1.100
+  –mode energy
+  scan_interval: 300
+  command_timeout: 15
+  json_attributes:
+  - total_energy
+  - energy_today
+  - grid_energy_today_total
+  - grid_energy_today_l1
+  - grid_energy_today_l2
+  - grid_energy_today_l3
+  - pv_energy_1
+  - pv_energy_2
+  - production_today_log
+  - production_this_week
+  - production_this_month
+  - production_this_year
+  - status
+  value_template: “{{ value_json.total_energy | default(0) }}”
+  unit_of_measurement: “Wh”
+  device_class: energy
+  state_class: total_increasing
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+
+# ║  Template-Sensoren (für beide Varianten nutzbar)                         ║
+
+# ║  → Extrahieren einzelne Werte aus den JSON-Attributen                    ║
+
+# ║  → Berechnen abgeleitete Werte (Effizienz, DC-Leistung)                 ║
+
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+template:
+
+- sensor:
+  
+  # ── Aktuelle Leistung ──────────────────────────────────────────────
+  - name: “TLX Leistung Gesamt”
+    unique_id: tlx_power_total
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘grid_power_total’) | default(0) | float }}
+    unit_of_measurement: “W”
+    device_class: power
+    state_class: measurement
+    icon: mdi:solar-power-variant
+  - name: “TLX Leistung L1”
+    unique_id: tlx_power_l1
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘grid_power_l1’) | default(0) | float }}
+    unit_of_measurement: “W”
+    device_class: power
+    state_class: measurement
+  - name: “TLX Leistung L2”
+    unique_id: tlx_power_l2
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘grid_power_l2’) | default(0) | float }}
+    unit_of_measurement: “W”
+    device_class: power
+    state_class: measurement
+  - name: “TLX Leistung L3”
+    unique_id: tlx_power_l3
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘grid_power_l3’) | default(0) | float }}
+    unit_of_measurement: “W”
+    device_class: power
+    state_class: measurement
+  
+  # ── PV-Strings (DC) ───────────────────────────────────────────────
+  - name: “TLX PV Spannung String 1”
+    unique_id: tlx_pv_v1
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘pv_voltage_1’) | default(0) | float }}
+    unit_of_measurement: “V”
+    device_class: voltage
+    state_class: measurement
+  - name: “TLX PV Spannung String 2”
+    unique_id: tlx_pv_v2
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘pv_voltage_2’) | default(0) | float }}
+    unit_of_measurement: “V”
+    device_class: voltage
+    state_class: measurement
+  - name: “TLX PV Strom String 1”
+    unique_id: tlx_pv_a1
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘pv_current_1’) | default(0) | float }}
+    unit_of_measurement: “A”
+    device_class: current
+    state_class: measurement
+  - name: “TLX PV Strom String 2”
+    unique_id: tlx_pv_a2
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘pv_current_2’) | default(0) | float }}
+    unit_of_measurement: “A”
+    device_class: current
+    state_class: measurement
+  - name: “TLX PV Leistung String 1”
+    unique_id: tlx_pv_w1
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘pv_power_1’) | default(0) | float }}
+    unit_of_measurement: “W”
+    device_class: power
+    state_class: measurement
+  - name: “TLX PV Leistung String 2”
+    unique_id: tlx_pv_w2
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘pv_power_2’) | default(0) | float }}
+    unit_of_measurement: “W”
+    device_class: power
+    state_class: measurement
+  
+  # ── DC Gesamtleistung (berechnet) ─────────────────────────────────
+  - name: “TLX DC Leistung Gesamt”
+    unique_id: tlx_dc_power_total
+    state: >-
+    {% set p1 = state_attr(‘sensor.danfoss_tlx_realtime’, ‘pv_power_1’) | default(0) | float %}
+    {% set p2 = state_attr(‘sensor.danfoss_tlx_realtime’, ‘pv_power_2’) | default(0) | float %}
+    {{ (p1 + p2) | round(0) }}
+    unit_of_measurement: “W”
+    device_class: power
+    state_class: measurement
+    icon: mdi:solar-panel-large
+  
+  # ── Wirkungsgrad (berechnet) ──────────────────────────────────────
+  - name: “TLX Wirkungsgrad”
+    unique_id: tlx_efficiency
+    state: >-
+    {% set ac = state_attr(‘sensor.danfoss_tlx_realtime’, ‘grid_power_total’) | default(0) | float %}
+    {% set p1 = state_attr(‘sensor.danfoss_tlx_realtime’, ‘pv_power_1’) | default(0) | float %}
+    {% set p2 = state_attr(‘sensor.danfoss_tlx_realtime’, ‘pv_power_2’) | default(0) | float %}
+    {% set dc = p1 + p2 %}
+    {% if dc > 50 %}
+    {{ ((ac / dc) * 100) | round(1) }}
+    {% else %}
+    0
+    {% endif %}
+    unit_of_measurement: “%”
+    icon: mdi:percent
+    state_class: measurement
+  
+  # ── Netzspannungen ────────────────────────────────────────────────
+  - name: “TLX Netzspannung L1”
+    unique_id: tlx_grid_v_l1
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘grid_voltage_l1’) | default(0) | float }}
+    unit_of_measurement: “V”
+    device_class: voltage
+    state_class: measurement
+  - name: “TLX Netzspannung L2”
+    unique_id: tlx_grid_v_l2
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘grid_voltage_l2’) | default(0) | float }}
+    unit_of_measurement: “V”
+    device_class: voltage
+    state_class: measurement
+  - name: “TLX Netzspannung L3”
+    unique_id: tlx_grid_v_l3
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘grid_voltage_l3’) | default(0) | float }}
+    unit_of_measurement: “V”
+    device_class: voltage
+    state_class: measurement
+  
+  # ── Netzfrequenz ──────────────────────────────────────────────────
+  - name: “TLX Netzfrequenz”
+    unique_id: tlx_grid_frequency
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘grid_frequency_avg’) | default(0) | float }}
+    unit_of_measurement: “Hz”
+    device_class: frequency
+    state_class: measurement
+  
+  # ── Betriebsmodus ─────────────────────────────────────────────────
+  - name: “TLX Betriebsmodus”
+    unique_id: tlx_operation_mode
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘operation_mode_text’) | default(‘Unbekannt’) }}
+    icon: mdi:information-outline
+  
+  # ── Online-Status ─────────────────────────────────────────────────
+  - name: “TLX Online”
+    unique_id: tlx_online
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_realtime’, ‘status’) | default(‘offline’) }}
+    icon: >-
+    {% if is_state(‘sensor.tlx_online’, ‘online’) %}
+    mdi:check-network
+    {% else %}
+    mdi:close-network
+    {% endif %}
+  
+  # ── Energie-Werte ─────────────────────────────────────────────────
+  - name: “TLX Gesamtproduktion”
+    unique_id: tlx_total_energy
+    state: >-
+    {% set wh = state_attr(‘sensor.danfoss_tlx_energy’, ‘total_energy’) | default(0) | float %}
+    {{ (wh / 1000) | round(1) }}
+    unit_of_measurement: “kWh”
+    device_class: energy
+    state_class: total_increasing
+    icon: mdi:counter
+  - name: “TLX Produktion heute”
+    unique_id: tlx_energy_today
+    state: >-
+    {% set wh = state_attr(‘sensor.danfoss_tlx_realtime’, ‘grid_energy_today_total’) | default(0) | float %}
+    {{ (wh / 1000) | round(2) }}
+    unit_of_measurement: “kWh”
+    device_class: energy
+    state_class: total_increasing
+    icon: mdi:white-balance-sunny
+  - name: “TLX Produktion diese Woche”
+    unique_id: tlx_energy_week
+    state: >-
+    {% set wh = state_attr(‘sensor.danfoss_tlx_energy’, ‘production_this_week’) | default(0) | float %}
+    {{ (wh / 1000) | round(1) }}
+    unit_of_measurement: “kWh”
+    device_class: energy
+    state_class: total_increasing
+  - name: “TLX Produktion diesen Monat”
+    unique_id: tlx_energy_month
+    state: >-
+    {% set wh = state_attr(‘sensor.danfoss_tlx_energy’, ‘production_this_month’) | default(0) | float %}
+    {{ (wh / 1000) | round(1) }}
+    unit_of_measurement: “kWh”
+    device_class: energy
+    state_class: total_increasing
+  - name: “TLX Produktion dieses Jahr”
+    unique_id: tlx_energy_year
+    state: >-
+    {{ state_attr(‘sensor.danfoss_tlx_energy’, ‘production_this_year’) | default(0) | float | round(0) }}
+    unit_of_measurement: “kWh”
+    device_class: energy
+    state_class: total_increasing
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+
+# ║  Automations                                                             ║
+
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+automation:
+
+# ── Fehler-Benachrichtigung ────────────────────────────────────────────
+
+- alias: “Danfoss TLX Fehlermeldung”
+  id: danfoss_tlx_error
+  trigger:
+  - platform: state
+    entity_id: sensor.tlx_betriebsmodus
+    to: “Störung”
+  - platform: state
+    entity_id: sensor.tlx_betriebsmodus
+    to: “Netzfehler”
+    action:
+  - service: persistent_notification.create
+    data:
+    title: “⚠️ Danfoss TLX Pro Warnung”
+    message: >-
+    Der Wechselrichter meldet: {{ states(‘sensor.tlx_betriebsmodus’) }}
+    Zeitpunkt: {{ now().strftime(’%d.%m.%Y %H:%M’) }}
+
+# ── Tagesproduktions-Bericht (21:00 Uhr) ──────────────────────────────
+
+- alias: “Danfoss TLX Tagesbericht”
+  id: danfoss_tlx_daily_report
+  trigger:
+  - platform: time
+    at: “21:00:00”
+    action:
+  - service: persistent_notification.create
+    data:
+    title: “☀️ Solar-Tagesbericht”
+    message: >-
+    Produktion heute: {{ states(‘sensor.tlx_produktion_heute’) }} kWh
+    Gesamtproduktion: {{ states(‘sensor.tlx_gesamtproduktion’) }} kWh
+    Max. Leistung heute: wird von HA im Energy-Dashboard erfasst
+
+# ── Hohe Produktion (optional) ─────────────────────────────────────────
+
+- alias: “Danfoss TLX Hohe Produktion”
+  id: danfoss_tlx_high_production
+  trigger:
+  - platform: numeric_state
+    entity_id: sensor.tlx_produktion_heute
+    above: 30
+    action:
+  - service: persistent_notification.create
+    data:
+    title: “🎉 Super Solartag!”
+    message: >-
+    Schon {{ states(‘sensor.tlx_produktion_heute’) }} kWh heute produziert!
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+
+# ║  Energy Dashboard                                                        ║
+
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# Für das HA Energy Dashboard verwende diesen Sensor:
+
+# → Solar-Produktion: sensor.tlx_produktion_heute (oder sensor.tlx_gesamtproduktion)
+
+# 
+
+# Bei MQTT-Variante (Variante A): Der entsprechende Sensor heißt
+
+# sensor.danfoss_tlx_<serial>_grid_energy_today_total

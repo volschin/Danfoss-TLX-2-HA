@@ -4,13 +4,10 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
 
 from custom_components.danfoss_tlx.const import (
-    DOMAIN,
     CONF_INVERTER_IP,
     CONF_INVERTER_SERIAL,
     CONF_PV_STRINGS,
     CONF_SCAN_INTERVAL,
-    DEFAULT_SCAN_INTERVAL,
-    DEFAULT_PV_STRINGS,
 )
 from custom_components.danfoss_tlx.config_flow import DanfossConfigFlow, DanfossOptionsFlow
 
@@ -36,7 +33,7 @@ class TestDanfossConfigFlow:
         flow._abort_if_unique_id_configured = MagicMock()
         flow.async_create_entry = MagicMock(return_value={"type": "create_entry"})
 
-        result = await flow.async_step_user({
+        await flow.async_step_user({
             CONF_INVERTER_IP: "192.168.1.100",
             CONF_INVERTER_SERIAL: "",
             CONF_PV_STRINGS: 2,

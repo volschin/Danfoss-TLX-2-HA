@@ -4,7 +4,6 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from custom_components.danfoss_tlx.const import (
-    CONF_INVERTER_IP,
     CONF_INVERTER_SERIAL,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
@@ -31,7 +30,7 @@ class TestDanfossCoordinator:
 
     def test_init_options_override_interval(self, mock_hass, mock_config_entry):
         mock_config_entry.options = {CONF_SCAN_INTERVAL: 60}
-        coordinator = _make_coordinator(mock_hass, mock_config_entry)
+        _make_coordinator(mock_hass, mock_config_entry)
         # The interval is read but passed to super().__init__ which is mocked,
         # so we verify the value calculation indirectly
         interval = mock_config_entry.options.get(

@@ -6,17 +6,10 @@ import pytest
 
 from custom_components.danfoss_tlx.etherlynx import (
     ETHERLYNX_HEADER_SIZE,
-    MASTER_SERIAL,
     Flag,
     MessageID,
-    ParameterDef,
-    DataType,
-    MODULE_COMM_BOARD,
-    TLX_PARAMETERS,
-    _pad_serial,
 )
 from custom_components.danfoss_tlx.const import (
-    DOMAIN,
     CONF_INVERTER_IP,
     CONF_INVERTER_SERIAL,
     CONF_PV_STRINGS,

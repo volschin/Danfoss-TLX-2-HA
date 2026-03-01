@@ -2,13 +2,11 @@
 import struct
 from unittest.mock import patch, MagicMock
 
-import pytest
 
 from custom_components.danfoss_tlx.etherlynx import (
     ETHERLYNX_PORT,
     ETHERLYNX_HEADER_SIZE,
     ETHERLYNX_DATA_OFFSET,
-    MASTER_SERIAL,
     MessageID,
     Flag,
     DataType,

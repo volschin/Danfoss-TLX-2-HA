@@ -1,10 +1,10 @@
 """Tests für die Sensor-Plattform."""
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from custom_components.danfoss_tlx.const import DOMAIN, CONF_PV_STRINGS
-from custom_components.danfoss_tlx.etherlynx import TLX_PARAMETERS, OPERATION_MODES
+from custom_components.danfoss_tlx.etherlynx import TLX_PARAMETERS
 from custom_components.danfoss_tlx.sensor import (
     async_setup_entry,
     DanfossSensor,

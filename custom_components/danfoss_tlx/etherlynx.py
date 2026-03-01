@@ -17,9 +17,9 @@ import struct
 import logging
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
@@ -692,7 +692,7 @@ def parse_parameter_response(
             break
 
         attr_byte = payload[offset]
-        module_byte = payload[offset + 1]
+        _ = payload[offset + 1]  # module_byte (nicht ausgewertet)
         param_index = payload[offset + 2]
         param_subindex = payload[offset + 3]
         raw_value = payload[offset + 4: offset + 8]

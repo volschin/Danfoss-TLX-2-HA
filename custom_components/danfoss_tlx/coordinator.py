@@ -25,8 +25,7 @@ class DanfossCoordinator(DataUpdateCoordinator):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self._ip: str = entry.data[CONF_INVERTER_IP]
-        self._preset_serial: str = entry.data.get(CONF_INVERTER_SERIAL, "")
-        self.inverter_serial: Optional[str] = self._preset_serial or None
+        self._inverter_serial: Optional[str] = entry.data.get(CONF_INVERTER_SERIAL)
         self._client: Optional[DanfossEtherLynx] = None
 
         interval = entry.options.get(
@@ -41,6 +40,11 @@ class DanfossCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=interval),
         )
 
+    @property
+    def inverter_serial(self) -> Optional[str]:
+        """Seriennummer des Inverters."""
+        return self._inverter_serial
+
     async def _async_update_data(self) -> Dict[str, Any]:
         """Holt Daten vom Inverter (wird im Executor-Thread ausgeführt)."""
         try:
@@ -53,8 +57,8 @@ class DanfossCoordinator(DataUpdateCoordinator):
         # Client initialisieren falls nötig
         if self._client is None:
             self._client = DanfossEtherLynx(self._ip)
-            if self._preset_serial:
-                self._client.inverter_serial = self._preset_serial
+            if self._inverter_serial:
+                self._client.inverter_serial = self._inverter_serial
             else:
                 serial = self._client.discover()
                 if not serial:
@@ -63,7 +67,7 @@ class DanfossCoordinator(DataUpdateCoordinator):
                         f"Inverter unter {self._ip} nicht erreichbar"
                     )
 
-        self.inverter_serial = self._client.inverter_serial
+        self._inverter_serial = self._client.inverter_serial
 
         data = self._client.read_all()
         if not data:
@@ -71,11 +75,5 @@ class DanfossCoordinator(DataUpdateCoordinator):
             self._client.close()
             self._client = None
             raise RuntimeError("Keine Daten vom Inverter empfangen")
-
-        # Betriebsmodus-Text hinzufügen
-        if "operation_mode" in data:
-            data["operation_mode_text"] = self._client.get_status_text(
-                data["operation_mode"]
-            )
 
         return data

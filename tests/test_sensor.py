@@ -10,7 +10,6 @@ from custom_components.danfoss_tlx.sensor import (
     DanfossSensor,
     DanfossOperationModeSensor,
     _device_info,
-    TEMP_SENTINEL_THRESHOLD,
     _OPTIONAL_SENSOR_KEYS,
 )
 

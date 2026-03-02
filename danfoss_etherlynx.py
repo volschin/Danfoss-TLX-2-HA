@@ -309,29 +309,29 @@ TLX_PARAMETERS: Dict[str, ParameterDef] = {
     "grid_energy_today_l1": ParameterDef(
         name="Netzenergie heute L1",
         index=0x02, subindex=0x47, data_type=DataType.UNSIGNED32,
-        module_id=MODULE_COMM_BOARD, unit="Wh", scale=1.0,
-        description="Grid Energy Today, phase L1 [Wh]",
+        module_id=MODULE_COMM_BOARD, unit="kWh", scale=0.001,
+        description="Grid Energy Today, phase L1 [Rohwert Wh]",
         device_class="energy", state_class="total_increasing",
     ),
     "grid_energy_today_l2": ParameterDef(
         name="Netzenergie heute L2",
         index=0x02, subindex=0x48, data_type=DataType.UNSIGNED32,
-        module_id=MODULE_COMM_BOARD, unit="Wh", scale=1.0,
-        description="Grid Energy Today, phase L2 [Wh]",
+        module_id=MODULE_COMM_BOARD, unit="kWh", scale=0.001,
+        description="Grid Energy Today, phase L2 [Rohwert Wh]",
         device_class="energy", state_class="total_increasing",
     ),
     "grid_energy_today_l3": ParameterDef(
         name="Netzenergie heute L3",
         index=0x02, subindex=0x49, data_type=DataType.UNSIGNED32,
-        module_id=MODULE_COMM_BOARD, unit="Wh", scale=1.0,
-        description="Grid Energy Today, phase L3 [Wh]",
+        module_id=MODULE_COMM_BOARD, unit="kWh", scale=0.001,
+        description="Grid Energy Today, phase L3 [Rohwert Wh]",
         device_class="energy", state_class="total_increasing",
     ),
     "grid_energy_today_total": ParameterDef(
         name="Netzenergie heute Gesamt",
         index=0x02, subindex=0x4A, data_type=DataType.UNSIGNED32,
-        module_id=MODULE_COMM_BOARD, unit="Wh", scale=1.0,
-        description="Grid Energy Today, sum of L1+L2+L3 [Wh]",
+        module_id=MODULE_COMM_BOARD, unit="kWh", scale=0.001,
+        description="Grid Energy Today, sum of L1+L2+L3 [Rohwert Wh]",
         device_class="energy", state_class="total_increasing",
     ),
 
@@ -452,8 +452,8 @@ TLX_PARAMETERS: Dict[str, ParameterDef] = {
     "production_today_log": ParameterDef(
         name="Produktion heute (Log)",
         index=120, subindex=10, data_type=DataType.UNSIGNED32,
-        module_id=MODULE_COMM_BOARD, unit="Wh", scale=1.0,
-        description="Inverter production today",
+        module_id=MODULE_COMM_BOARD, unit="kWh", scale=0.001,
+        description="Inverter production today [Rohwert Wh]",
         device_class="energy", state_class="total_increasing",
     ),
     "production_this_week": ParameterDef(

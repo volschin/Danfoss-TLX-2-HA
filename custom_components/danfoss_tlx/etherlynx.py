@@ -107,8 +107,8 @@ TLX_PARAMETERS: Dict[str, ParameterDef] = {
     "total_energy": ParameterDef(
         name="Gesamtproduktion",
         index=0x01, subindex=0x02, data_type=DataType.UNSIGNED32,
-        module_id=MODULE_COMM_BOARD, unit="Wh", scale=1.0,
-        description="Total Energy Production über Lebensdauer",
+        module_id=MODULE_COMM_BOARD, unit="kWh", scale=0.001,
+        description="Total Energy Production über Lebensdauer [Rohwert Wh]",
         device_class="energy", state_class="total_increasing",
     ),
     "energy_today": ParameterDef(
@@ -473,8 +473,8 @@ TLX_PARAMETERS: Dict[str, ParameterDef] = {
     "production_this_year": ParameterDef(
         name="Produktion dieses Jahr",
         index=120, subindex=50, data_type=DataType.UNSIGNED32,
-        module_id=MODULE_COMM_BOARD, unit="kWh", scale=1.0,
-        description="Inverter production this year [kWh für TLX]",
+        module_id=MODULE_COMM_BOARD, unit="kWh", scale=0.001,
+        description="Inverter production this year [Rohwert Wh]",
         device_class="energy", state_class="total_increasing",
     ),
 }

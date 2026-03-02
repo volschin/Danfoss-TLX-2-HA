@@ -11,13 +11,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, CONF_PV_STRINGS
 from .coordinator import DanfossCoordinator
-from .etherlynx import TLX_PARAMETERS, get_operation_mode_text, ParameterDef
+from .etherlynx import TLX_PARAMETERS, get_operation_mode_text, get_event_text, ParameterDef
 
 # Temperatur-Sentinel: Werte >= 120°C bedeuten "kein Sensor angeschlossen"
 TEMP_SENTINEL_THRESHOLD = 120
 
 # Parameter die einen optionalen externen Sensor erfordern
-_OPTIONAL_SENSOR_KEYS = {"ambient_temp", "pv_array_temp", "irradiance"}
+_OPTIONAL_SENSOR_KEYS = {"ambient_temp", "pv_array_temp", "irradiance", "hardware_type"}
 
 
 async def async_setup_entry(
@@ -39,6 +39,9 @@ async def async_setup_entry(
 
     # Betriebsmodus als Text-Sensor
     entities.append(DanfossOperationModeSensor(coordinator, entry))
+
+    # Letztes Ereignis als Text-Sensor
+    entities.append(DanfossEventSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -124,6 +127,35 @@ class DanfossOperationModeSensor(CoordinatorEntity, SensorEntity):
             mode_id = self.coordinator.data.get("operation_mode")
             if mode_id is not None:
                 return get_operation_mode_text(mode_id)
+        return None
+
+    @property
+    def device_info(self) -> Dict[str, Any]:
+        """Geräteinformationen für das HA-Geräteregister."""
+        return _device_info(self.coordinator, self._entry)
+
+
+class DanfossEventSensor(CoordinatorEntity, SensorEntity):
+    """Text-Sensor für das letzte Ereignis/Fehlercode des Wechselrichters."""
+
+    def __init__(
+        self,
+        coordinator: DanfossCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_name = "Letztes Ereignis"
+        self._attr_unique_id = f"danfoss_tlx_{entry.entry_id}_latest_event_text"
+        self._attr_icon = "mdi:alert-circle-outline"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Letztes Ereignis als lesbarer Text."""
+        if self.coordinator.data:
+            event_id = self.coordinator.data.get("latest_event")
+            if event_id is not None:
+                return get_event_text(event_id)
         return None
 
     @property

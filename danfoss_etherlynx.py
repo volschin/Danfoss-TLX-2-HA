@@ -503,6 +503,64 @@ def get_operation_mode_text(mode_id: int) -> str:
 # Abwärtskompatibilität: OPERATION_MODES wird in sensor.py importiert
 OPERATION_MODES = {i: get_operation_mode_text(i) for i in range(90)}
 
+# Ereignis-/Fehlercodes basierend auf der Danfoss Dokumentation
+# Quelle: greenenergy-repair.com/blogs/errors/danfoss + Danfoss TLX User Guide
+EVENT_CODES: Dict[int, str] = {
+    0: "Kein Ereignis",
+    1: "Netzspannung L1 zu niedrig",
+    2: "Netzspannung L2 zu niedrig",
+    3: "Netzspannung L3 zu niedrig",
+    4: "Netzspannung L1 zu niedrig",
+    5: "Netzspannung L2 zu niedrig",
+    6: "Netzspannung L3 zu niedrig",
+    7: "Netzspannung L1 Mittelwert zu hoch",
+    8: "Netzspannung L2 Mittelwert zu hoch",
+    9: "Netzspannung L3 Mittelwert zu hoch",
+    10: "Netzspannung L1 zu hoch",
+    11: "Netzspannung L2 zu hoch",
+    12: "Netzspannung L3 zu hoch",
+    13: "Netzspannung L1 zu hoch",
+    14: "Netzspannung L2 zu hoch",
+    15: "Netzspannung L3 zu hoch",
+    19: "Netzfrequenz L1 außerhalb Bereich",
+    20: "Netzfrequenz L2 außerhalb Bereich",
+    21: "Netzfrequenz L3 außerhalb Bereich",
+    22: "Netzfrequenz L1 außerhalb Bereich",
+    23: "Netzfrequenz L2 außerhalb Bereich",
+    24: "Netzfrequenz L3 außerhalb Bereich",
+    40: "Netz nicht verfügbar (>10 Min.)",
+    115: "Isolationswiderstand PV-Erde zu niedrig",
+    201: "Interne Temperaturwarnung",
+    202: "Interne Temperaturwarnung",
+    203: "Interne Temperaturwarnung",
+    204: "Interne Temperaturwarnung",
+    205: "Interne Temperaturwarnung",
+    206: "Interne Temperaturwarnung",
+    207: "Interne Temperaturwarnung",
+    208: "Interne Temperaturwarnung",
+    223: "Anti-Islanding-Schutz ausgelöst",
+    225: "Interner Speicherfehler",
+    350: "RCMU-Selbsttest fehlgeschlagen",
+    351: "RCMU-Selbsttest fehlgeschlagen",
+    352: "RCMU-Selbsttest fehlgeschlagen",
+    356: "Transistor-/Relaistest fehlgeschlagen",
+    357: "Transistor-/Relaistest fehlgeschlagen",
+    358: "Transistor-/Relaistest fehlgeschlagen",
+    359: "Transistor-/Relaistest fehlgeschlagen",
+    360: "Transistor-/Relaistest fehlgeschlagen",
+    361: "Transistor-/Relaistest fehlgeschlagen",
+    362: "Transistor-/Relaistest fehlgeschlagen",
+    363: "Transistor-/Relaistest fehlgeschlagen",
+    364: "AC-Installationsfehler",
+}
+
+
+def get_event_text(event_id: int) -> str:
+    """Gibt den Ereignis-Text für den Rohwert zurück."""
+    event_id = int(event_id)
+    return EVENT_CODES.get(event_id, f"Ereignis {event_id}")
+
+
 # ============================================================================
 # EtherLynx Paket-Builder und -Parser
 # ============================================================================

@@ -9,6 +9,7 @@ from custom_components.danfoss_tlx.sensor import (
     async_setup_entry,
     DanfossSensor,
     DanfossOperationModeSensor,
+    DanfossEventSensor,
     _device_info,
     _OPTIONAL_SENSOR_KEYS,
 )
@@ -43,9 +44,9 @@ class TestAsyncSetupEntry:
 
         await async_setup_entry(mock_hass, mock_config_entry, capture_entities)
 
-        # All TLX_PARAMETERS sensors (minus pv_*_3 for 2 strings) + 1 operation_mode_text
+        # All TLX_PARAMETERS sensors (minus pv_*_3 for 2 strings) + 2 text sensors
         pv3_count = sum(1 for k in TLX_PARAMETERS if k.startswith("pv_") and "_3" in k)
-        expected = len(TLX_PARAMETERS) - pv3_count + 1
+        expected = len(TLX_PARAMETERS) - pv3_count + 2
         assert len(added_entities) == expected
 
     @pytest.mark.asyncio
@@ -169,6 +170,44 @@ class TestDanfossOperationModeSensor:
         assert sensor._attr_name == "Betriebsmodus"
         assert "operation_mode_text" in sensor._attr_unique_id
         assert sensor._attr_icon == "mdi:solar-power"
+
+
+class TestDanfossEventSensor:
+    def test_maps_event_0_no_event(self, mock_coordinator, mock_config_entry):
+        """Rohwert 0 = Kein Ereignis."""
+        sensor = DanfossEventSensor(mock_coordinator, mock_config_entry)
+        assert sensor.native_value == "Kein Ereignis"
+
+    def test_maps_event_115_isolation(self, mock_config_entry):
+        """Rohwert 115 = Isolationswiderstand PV-Erde zu niedrig."""
+        coordinator = MagicMock()
+        coordinator.data = {"latest_event": 115.0}
+        sensor = DanfossEventSensor(coordinator, mock_config_entry)
+        assert sensor.native_value == "Isolationswiderstand PV-Erde zu niedrig"
+
+    def test_maps_event_1_voltage_low(self, mock_config_entry):
+        """Rohwert 1 = Netzspannung L1 zu niedrig."""
+        coordinator = MagicMock()
+        coordinator.data = {"latest_event": 1.0}
+        sensor = DanfossEventSensor(coordinator, mock_config_entry)
+        assert sensor.native_value == "Netzspannung L1 zu niedrig"
+
+    def test_unknown_event(self, mock_config_entry):
+        """Unbekannter Ereignis-Code wird als 'Ereignis X' angezeigt."""
+        coordinator = MagicMock()
+        coordinator.data = {"latest_event": 999.0}
+        sensor = DanfossEventSensor(coordinator, mock_config_entry)
+        assert sensor.native_value == "Ereignis 999"
+
+    def test_no_data(self, mock_coordinator_no_data, mock_config_entry):
+        sensor = DanfossEventSensor(mock_coordinator_no_data, mock_config_entry)
+        assert sensor.native_value is None
+
+    def test_attributes(self, mock_coordinator, mock_config_entry):
+        sensor = DanfossEventSensor(mock_coordinator, mock_config_entry)
+        assert sensor._attr_name == "Letztes Ereignis"
+        assert "latest_event_text" in sensor._attr_unique_id
+        assert sensor._attr_icon == "mdi:alert-circle-outline"
 
 
 class TestDeviceInfo:

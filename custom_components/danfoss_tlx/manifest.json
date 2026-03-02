@@ -7,5 +7,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/volschin/Danfoss-TLX-2-HA/issues",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "0.3.0"
 }

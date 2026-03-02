@@ -570,6 +570,17 @@ class TestRegistry:
         assert "Unbekannt" in get_operation_mode_text(90)
         assert "Unbekannt" in get_operation_mode_text(99)
 
+    def test_event_codes_cover_known_events(self):
+        """Bekannte Ereignis-Codes liefern einen Text."""
+        from danfoss_etherlynx import get_event_text
+        assert get_event_text(0) == "Kein Ereignis"
+        assert get_event_text(1) == "Netzspannung L1 zu niedrig"
+        assert get_event_text(115) == "Isolationswiderstand PV-Erde zu niedrig"
+        # Unbekannter Code → Fallback
+        assert get_event_text(999) == "Ereignis 999"
+        # Float-Werte werden korrekt auf int konvertiert
+        assert get_event_text(0.0) == "Kein Ereignis"
+
     def test_all_parameters_have_module_id(self):
         for key, param in TLX_PARAMETERS.items():
             assert param.module_id == MODULE_COMM_BOARD, \

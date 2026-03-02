@@ -221,6 +221,83 @@ class TestReadAll:
                 print(f"  PV String {i}: {v} V, {c} A, {p} W")
 
 
+# ── System-Parameter ─────────────────────────────────────────────────
+
+
+class TestSystemParameters:
+    """Testet System-Parameter die spezifische Datentyp-Probleme hatten."""
+
+    def test_hardware_type_nonzero(self, client):
+        """Hardware-Typ muss einen plausiblen Wert > 0 liefern."""
+        client.discover()
+        result = client.read_parameters(["hardware_type"])
+        assert "hardware_type" in result, "hardware_type fehlt in Antwort"
+        hw = result["hardware_type"]
+        assert hw >= 0, f"hardware_type = {hw}, erwartet >= 0"
+        print(f"  hardware_type: {hw}")
+
+    def test_latest_event_readable(self, client):
+        """Letztes Ereignis muss lesbar sein (0 = kein Fehler)."""
+        client.discover()
+        result = client.read_parameters(["latest_event"])
+        assert "latest_event" in result, "latest_event fehlt in Antwort"
+        event = result["latest_event"]
+        assert event >= 0, f"latest_event = {event}, erwartet >= 0"
+        print(f"  latest_event: {event}")
+
+    def test_latest_event_raw_bytes(self, client, inverter_ip):
+        """Zeigt die Roh-Bytes des latest_event für Datentyp-Analyse."""
+        serial = client.discover()
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5.0)
+        sock.bind(('', 0))
+        try:
+            param = TLX_PARAMETERS["latest_event"]
+            packet = build_get_parameters_packet(
+                MASTER_SERIAL, serial, [param], transaction_no=77,
+            )
+            sock.sendto(packet, (inverter_ip, ETHERLYNX_PORT))
+            resp, _ = sock.recvfrom(4096)
+
+            # Payload: 4 Byte Header + 4 Byte Param-Header + 4 Byte Value
+            payload = resp[ETHERLYNX_HEADER_SIZE:]
+            raw_value = payload[8:12]
+            print(f"  latest_event raw bytes: {raw_value.hex()}")
+            print(f"    als UNSIGNED32 BE: {struct.unpack('>I', raw_value)[0]}")
+            print(f"    als UNSIGNED16 BE (bytes 2-3): {struct.unpack('>H', raw_value[2:4])[0]}")
+            print(f"    als UNSIGNED16 BE (bytes 0-1): {struct.unpack('>H', raw_value[0:2])[0]}")
+            print(f"    als UNSIGNED8 (byte 3): {raw_value[3]}")
+            print(f"    als UNSIGNED8 (byte 0): {raw_value[0]}")
+        finally:
+            sock.close()
+
+    def test_hardware_type_raw_bytes(self, client, inverter_ip):
+        """Zeigt die Roh-Bytes des hardware_type für Datentyp-Analyse."""
+        serial = client.discover()
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5.0)
+        sock.bind(('', 0))
+        try:
+            param = TLX_PARAMETERS["hardware_type"]
+            packet = build_get_parameters_packet(
+                MASTER_SERIAL, serial, [param], transaction_no=78,
+            )
+            sock.sendto(packet, (inverter_ip, ETHERLYNX_PORT))
+            resp, _ = sock.recvfrom(4096)
+
+            payload = resp[ETHERLYNX_HEADER_SIZE:]
+            raw_value = payload[8:12]
+            print(f"  hardware_type raw bytes: {raw_value.hex()}")
+            print(f"    als UNSIGNED32 BE: {struct.unpack('>I', raw_value)[0]}")
+            print(f"    als UNSIGNED16 BE (bytes 2-3): {struct.unpack('>H', raw_value[2:4])[0]}")
+            print(f"    als UNSIGNED8 (byte 3): {raw_value[3]}")
+            print(f"    als UNSIGNED8 (byte 0): {raw_value[0]}")
+        finally:
+            sock.close()
+
+
 # ── Protokoll-Details ────────────────────────────────────────────────
 
 

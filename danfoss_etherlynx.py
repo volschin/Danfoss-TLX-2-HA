@@ -459,15 +459,15 @@ TLX_PARAMETERS: Dict[str, ParameterDef] = {
     "production_this_week": ParameterDef(
         name="Produktion diese Woche",
         index=120, subindex=20, data_type=DataType.UNSIGNED32,
-        module_id=MODULE_COMM_BOARD, unit="Wh", scale=1.0,
-        description="Inverter production this week",
+        module_id=MODULE_COMM_BOARD, unit="kWh", scale=0.001,
+        description="Inverter production this week [Rohwert Wh]",
         device_class="energy", state_class="total_increasing",
     ),
     "production_this_month": ParameterDef(
         name="Produktion diesen Monat",
         index=120, subindex=30, data_type=DataType.UNSIGNED32,
-        module_id=MODULE_COMM_BOARD, unit="Wh", scale=1.0,
-        description="Inverter production this month",
+        module_id=MODULE_COMM_BOARD, unit="kWh", scale=0.001,
+        description="Inverter production this month [Rohwert Wh]",
         device_class="energy", state_class="total_increasing",
     ),
     "production_this_year": ParameterDef(

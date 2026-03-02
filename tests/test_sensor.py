@@ -135,15 +135,30 @@ class TestDanfossSensor:
 
 
 class TestDanfossOperationModeSensor:
-    def test_maps_mode_4(self, mock_coordinator, mock_config_entry):
+    def test_maps_mode_60_on_grid(self, mock_coordinator, mock_config_entry):
+        """Rohwert 60 = Produziert (On Grid)."""
         sensor = DanfossOperationModeSensor(mock_coordinator, mock_config_entry)
-        assert sensor.native_value == "Produziert"
+        assert sensor.native_value == "Produziert (On Grid)"
+
+    def test_maps_mode_0_off(self, mock_config_entry):
+        """Rohwert 0 = Aus (Off Grid)."""
+        coordinator = MagicMock()
+        coordinator.data = {"operation_mode": 0.0}
+        sensor = DanfossOperationModeSensor(coordinator, mock_config_entry)
+        assert sensor.native_value == "Aus (Off Grid)"
+
+    def test_maps_mode_50_connecting(self, mock_config_entry):
+        """Rohwert 50 = Verbindet (Connecting)."""
+        coordinator = MagicMock()
+        coordinator.data = {"operation_mode": 50.0}
+        sensor = DanfossOperationModeSensor(coordinator, mock_config_entry)
+        assert sensor.native_value == "Verbindet (Connecting)"
 
     def test_unknown_mode(self, mock_config_entry):
         coordinator = MagicMock()
         coordinator.data = {"operation_mode": 99.0}
         sensor = DanfossOperationModeSensor(coordinator, mock_config_entry)
-        assert sensor.native_value == "Unbekannt (99.0)"
+        assert sensor.native_value == "Unbekannt (99)"
 
     def test_no_data(self, mock_coordinator_no_data, mock_config_entry):
         sensor = DanfossOperationModeSensor(mock_coordinator_no_data, mock_config_entry)

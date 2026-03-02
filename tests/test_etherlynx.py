@@ -13,7 +13,6 @@ from custom_components.danfoss_tlx.etherlynx import (
     MODULE_COMM_BOARD,
     ParameterDef,
     TLX_PARAMETERS,
-    OPERATION_MODES,
     DanfossEtherLynx,
     _pad_serial,
     _build_header,
@@ -511,9 +510,9 @@ class TestDanfossEtherLynx:
 
     def test_get_status_text_known(self):
         client = DanfossEtherLynx("192.168.1.100")
-        assert client.get_status_text(4) == "Produziert"
-        assert client.get_status_text(0) == "Nicht verfügbar"
-        assert client.get_status_text(8) == "Nacht/Schlaf"
+        assert client.get_status_text(60) == "Produziert (On Grid)"
+        assert client.get_status_text(0) == "Aus (Off Grid)"
+        assert client.get_status_text(80) == "Aus, Kommunikation aktiv (Off Grid, Comm)"
 
     def test_get_status_text_unknown(self):
         client = DanfossEtherLynx("192.168.1.100")
@@ -560,9 +559,16 @@ class TestRegistry:
             assert param.data_type in valid_types, \
                 f"Parameter '{key}' hat ungültigen DataType: {param.data_type}"
 
-    def test_operation_modes_cover_0_to_8(self):
-        for i in range(9):
-            assert i in OPERATION_MODES, f"Modus {i} fehlt in OPERATION_MODES"
+    def test_operation_modes_cover_all_ranges(self):
+        """Alle definierten Bereiche liefern einen Text, nicht 'Unbekannt'."""
+        from danfoss_etherlynx import get_operation_mode_text
+        test_values = [0, 5, 9, 10, 30, 49, 50, 55, 59, 60, 65, 69, 70, 75, 79, 80, 85, 89]
+        for v in test_values:
+            text = get_operation_mode_text(v)
+            assert "Unbekannt" not in text, f"Modus {v} ist 'Unbekannt'"
+        # Werte außerhalb der Bereiche → Unbekannt
+        assert "Unbekannt" in get_operation_mode_text(90)
+        assert "Unbekannt" in get_operation_mode_text(99)
 
     def test_all_parameters_have_module_id(self):
         for key, param in TLX_PARAMETERS.items():

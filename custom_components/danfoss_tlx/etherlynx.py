@@ -479,18 +479,29 @@ TLX_PARAMETERS: Dict[str, ParameterDef] = {
     ),
 }
 
-# Betriebsmodus-Texte (aus Appendix C, Status Information)
-OPERATION_MODES = {
-    0: "Nicht verfügbar",
-    1: "Aus",
-    2: "Standby",
-    3: "Startet",
-    4: "Produziert",
-    5: "Netzfehler",
-    6: "Störung",
-    7: "Selbsttest",
-    8: "Nacht/Schlaf",
-}
+# Betriebsmodus-Bereiche basierend auf dem Danfoss TLX Rohwert.
+# Quelle: AMajland/Danfoss-TLX RS485-Implementierung + Appendix C
+OPERATION_MODE_RANGES = [
+    (0, 9, "Aus (Off Grid)"),
+    (10, 49, "Startet (Boot)"),
+    (50, 59, "Verbindet (Connecting)"),
+    (60, 69, "Produziert (On Grid)"),
+    (70, 79, "Störung (Fail Safe)"),
+    (80, 89, "Aus, Kommunikation aktiv (Off Grid, Comm)"),
+]
+
+
+def get_operation_mode_text(mode_id: int) -> str:
+    """Gibt den Betriebsmodus-Text für den Rohwert zurück."""
+    mode_id = int(mode_id)
+    for low, high, text in OPERATION_MODE_RANGES:
+        if low <= mode_id <= high:
+            return text
+    return f"Unbekannt ({mode_id})"
+
+
+# Abwärtskompatibilität: OPERATION_MODES wird in sensor.py importiert
+OPERATION_MODES = {i: get_operation_mode_text(i) for i in range(90)}
 
 # ============================================================================
 # EtherLynx Paket-Builder und -Parser
@@ -1010,7 +1021,7 @@ class DanfossEtherLynx:
 
     def get_status_text(self, mode_id: int) -> str:
         """Gibt den Betriebsmodus als Text zurück."""
-        return OPERATION_MODES.get(int(mode_id), f"Unbekannt ({mode_id})")
+        return get_operation_mode_text(mode_id)
 
 
 # ============================================================================

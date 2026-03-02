@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, CONF_PV_STRINGS
 from .coordinator import DanfossCoordinator
-from .etherlynx import TLX_PARAMETERS, OPERATION_MODES, ParameterDef
+from .etherlynx import TLX_PARAMETERS, get_operation_mode_text, ParameterDef
 
 # Temperatur-Sentinel: Werte >= 120°C bedeuten "kein Sensor angeschlossen"
 TEMP_SENTINEL_THRESHOLD = 120
@@ -123,7 +123,7 @@ class DanfossOperationModeSensor(CoordinatorEntity, SensorEntity):
         if self.coordinator.data:
             mode_id = self.coordinator.data.get("operation_mode")
             if mode_id is not None:
-                return OPERATION_MODES.get(int(mode_id), f"Unbekannt ({mode_id})")
+                return get_operation_mode_text(mode_id)
         return None
 
     @property

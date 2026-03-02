@@ -98,7 +98,7 @@ def sample_inverter_data():
         "irradiance": 850.0,
         "ambient_temp": 25.0,
         "pv_array_temp": 42.0,
-        "operation_mode": 4.0,
+        "operation_mode": 60.0,
         "latest_event": 0.0,
         "hardware_type": 7.0,
         "nominal_power": 12500.0,

@@ -63,13 +63,13 @@ class TestDanfossCoordinator:
         mock_cls.return_value = mock_client
         mock_client.discover.return_value = "DISCOVERED_SER"
         mock_client.inverter_serial = "DISCOVERED_SER"
-        mock_client.read_all.return_value = {"operation_mode": 4.0}
+        mock_client.read_all.return_value = {"operation_mode": 60.0}
 
         coordinator = _make_coordinator(mock_hass, mock_config_entry)
         data = coordinator._fetch_data()
 
         mock_client.discover.assert_called_once()
-        assert data["operation_mode"] == 4.0
+        assert data["operation_mode"] == 60.0
 
     @patch("custom_components.danfoss_tlx.coordinator.DanfossEtherLynx")
     def test_fetch_data_resets_on_empty_result(self, mock_cls, mock_hass, mock_config_entry):

@@ -60,6 +60,8 @@ def _device_info(coordinator: DanfossCoordinator, entry: ConfigEntry) -> Dict[st
 class DanfossSensor(CoordinatorEntity, SensorEntity):
     """Sensor für einen Danfoss TLX Pro Parameter."""
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         coordinator: DanfossCoordinator,
@@ -109,6 +111,8 @@ class DanfossSensor(CoordinatorEntity, SensorEntity):
 class DanfossOperationModeSensor(CoordinatorEntity, SensorEntity):
     """Text-Sensor für den Betriebsmodus des Wechselrichters."""
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         coordinator: DanfossCoordinator,
@@ -137,6 +141,8 @@ class DanfossOperationModeSensor(CoordinatorEntity, SensorEntity):
 
 class DanfossEventSensor(CoordinatorEntity, SensorEntity):
     """Text-Sensor für das letzte Ereignis/Fehlercode des Wechselrichters."""
+
+    _attr_has_entity_name = True
 
     def __init__(
         self,

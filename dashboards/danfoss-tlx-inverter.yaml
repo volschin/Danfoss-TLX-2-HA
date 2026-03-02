@@ -9,12 +9,15 @@
 #   4. Entity-IDs anpassen (siehe unten)
 #
 # Entity-IDs anpassen:
-#   Die Entity-IDs folgen dem Muster:
+#   HA generiert entity_ids nach dem Muster:
 #     sensor.<geraetename>_<sensorname>
-#   Beispiel: sensor.danfoss_tlx_pro_tlx123_netzleistung_gesamt
+#   z.B. sensor.danfoss_tlx_pro_tlx123456_netzleistung_gesamt
 #
-#   Ersetze alle "sensor.danfoss_tlx_pro_" Prefixe durch dein tatsaechliches
-#   Prefix. Du findest es unter Einstellungen > Geraete > Danfoss TLX Pro.
+#   Dieses Dashboard verwendet Platzhalter OHNE Seriennummer:
+#     sensor.danfoss_tlx_pro_netzleistung_gesamt
+#
+#   Suche-und-Ersetze: "sensor.danfoss_tlx_pro_" → "sensor.danfoss_tlx_pro_DEINE_SERIAL_"
+#   Deine Entity-IDs findest du unter Einstellungen > Geraete > Danfoss TLX Pro.
 #
 # Voraussetzung: Danfoss TLX Pro Integration (2 PV-Strings Konfiguration)
 # ============================================================================

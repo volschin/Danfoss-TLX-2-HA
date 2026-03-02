@@ -1,7 +1,7 @@
 """Danfoss TLX Pro Integration für Home Assistant."""
 from __future__ import annotations
 
-from typing import TypeAlias
+from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -9,7 +9,10 @@ from homeassistant.core import HomeAssistant
 
 from .coordinator import DanfossCoordinator
 
-DanfossTLXConfigEntry: TypeAlias = ConfigEntry[DanfossCoordinator]
+if TYPE_CHECKING:
+    DanfossTLXConfigEntry = ConfigEntry[DanfossCoordinator]
+else:
+    DanfossTLXConfigEntry = ConfigEntry
 
 PLATFORMS = [Platform.SENSOR]
 

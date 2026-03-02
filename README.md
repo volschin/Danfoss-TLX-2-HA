@@ -14,17 +14,17 @@ Hardware wie ESP32 oder RS485-Adapter.
 ```mermaid
 flowchart LR
     subgraph ha["Home Assistant"]
-        bridge["danfoss_ha_bridge.py\n→ MQTT oder\n→ JSON stdout"]
-        mqtt["MQTT Broker\n(Mosquitto)\nAuto-Discovery"]
-        sensors["HA Sensoren\nEnergy Dashboard\n40+ Sensoren"]
+        bridge["danfoss_ha_bridge.py<br/>→ MQTT oder<br/>→ JSON stdout"]
+        mqtt["MQTT Broker<br/>(Mosquitto)<br/>Auto-Discovery"]
+        sensors["HA Sensoren<br/>Energy Dashboard<br/>40+ Sensoren"]
         bridge --> mqtt --> sensors
     end
 
     subgraph inverter["Danfoss TLX Pro"]
-        comm["Communication\nBoard (#8)\nEthernet Port"]
+        comm["Communication<br/>Board (#8)<br/>Ethernet Port"]
     end
 
-    bridge <-- "UDP Port 48004\nEthernet / LAN\nPing → Discovery\nGet Parameters → ← Values" --> comm
+    bridge <-- "UDP Port 48004<br/>Ethernet / LAN<br/>Ping → Discovery<br/>Get Parameters → ← Values" --> comm
 ```
 
 ## Voraussetzungen

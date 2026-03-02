@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from homeassistant.const import EntityCategory
 from custom_components.danfoss_tlx.const import DOMAIN, CONF_PV_STRINGS
 from custom_components.danfoss_tlx.etherlynx import TLX_PARAMETERS
 from custom_components.danfoss_tlx.sensor import (
@@ -12,6 +13,8 @@ from custom_components.danfoss_tlx.sensor import (
     DanfossEventSensor,
     _device_info,
     _OPTIONAL_SENSOR_KEYS,
+    _DIAGNOSTIC_KEYS,
+    PARALLEL_UPDATES,
 )
 
 
@@ -36,7 +39,7 @@ def mock_coordinator_no_data():
 class TestAsyncSetupEntry:
     @pytest.mark.asyncio
     async def test_creates_sensors(self, mock_hass, mock_config_entry, mock_coordinator):
-        mock_hass.data[DOMAIN] = {mock_config_entry.entry_id: mock_coordinator}
+        mock_config_entry.runtime_data = mock_coordinator
         added_entities = []
 
         def capture_entities(entities):
@@ -51,7 +54,7 @@ class TestAsyncSetupEntry:
 
     @pytest.mark.asyncio
     async def test_pv3_excluded_with_2_strings(self, mock_hass, mock_config_entry, mock_coordinator):
-        mock_hass.data[DOMAIN] = {mock_config_entry.entry_id: mock_coordinator}
+        mock_config_entry.runtime_data = mock_coordinator
         mock_config_entry.data[CONF_PV_STRINGS] = 2
         added_entities = []
 
@@ -63,7 +66,7 @@ class TestAsyncSetupEntry:
 
     @pytest.mark.asyncio
     async def test_pv3_included_with_3_strings(self, mock_hass, mock_config_entry, mock_coordinator):
-        mock_hass.data[DOMAIN] = {mock_config_entry.entry_id: mock_coordinator}
+        mock_config_entry.runtime_data = mock_coordinator
         mock_config_entry.data[CONF_PV_STRINGS] = 3
         added_entities = []
 
@@ -134,6 +137,41 @@ class TestDanfossSensor:
         sensor = DanfossSensor(mock_coordinator, mock_config_entry, "grid_power_total", param)
         assert not hasattr(sensor, "_attr_entity_registry_enabled_default")
 
+    def test_diagnostic_sensors_have_entity_category(self, mock_coordinator, mock_config_entry):
+        """Diagnose-Parameter haben EntityCategory.DIAGNOSTIC."""
+        for key in _DIAGNOSTIC_KEYS:
+            param = TLX_PARAMETERS[key]
+            sensor = DanfossSensor(mock_coordinator, mock_config_entry, key, param)
+            assert sensor._attr_entity_category == EntityCategory.DIAGNOSTIC
+
+    def test_measurement_sensors_no_entity_category(self, mock_coordinator, mock_config_entry):
+        """Normale Messsensoren haben keine EntityCategory."""
+        param = TLX_PARAMETERS["grid_power_total"]
+        sensor = DanfossSensor(mock_coordinator, mock_config_entry, "grid_power_total", param)
+        assert not hasattr(sensor, "_attr_entity_category")
+
+    def test_suggested_display_precision_voltage(self, mock_coordinator, mock_config_entry):
+        """Spannungssensoren (scale=0.1) haben precision=1."""
+        param = TLX_PARAMETERS["grid_voltage_l1"]
+        sensor = DanfossSensor(mock_coordinator, mock_config_entry, "grid_voltage_l1", param)
+        assert sensor._attr_suggested_display_precision == 1
+
+    def test_suggested_display_precision_frequency(self, mock_coordinator, mock_config_entry):
+        """Frequenzsensoren (scale=0.001) haben precision=2."""
+        param = TLX_PARAMETERS["grid_frequency_l1"]
+        sensor = DanfossSensor(mock_coordinator, mock_config_entry, "grid_frequency_l1", param)
+        assert sensor._attr_suggested_display_precision == 2
+
+    def test_suggested_display_precision_power(self, mock_coordinator, mock_config_entry):
+        """Leistungssensoren (ganzzahlig) haben precision=0."""
+        param = TLX_PARAMETERS["grid_power_total"]
+        sensor = DanfossSensor(mock_coordinator, mock_config_entry, "grid_power_total", param)
+        assert sensor._attr_suggested_display_precision == 0
+
+    def test_parallel_updates_zero(self):
+        """PARALLEL_UPDATES muss 0 sein (Coordinator-basiert)."""
+        assert PARALLEL_UPDATES == 0
+
 
 class TestDanfossOperationModeSensor:
     def test_maps_mode_60_on_grid(self, mock_coordinator, mock_config_entry):
@@ -170,6 +208,11 @@ class TestDanfossOperationModeSensor:
         assert sensor._attr_name == "Betriebsmodus"
         assert "operation_mode_text" in sensor._attr_unique_id
         assert sensor._attr_icon == "mdi:solar-power"
+
+    def test_entity_category_diagnostic(self, mock_coordinator, mock_config_entry):
+        """OperationModeSensor hat EntityCategory.DIAGNOSTIC."""
+        sensor = DanfossOperationModeSensor(mock_coordinator, mock_config_entry)
+        assert sensor._attr_entity_category == EntityCategory.DIAGNOSTIC
 
 
 class TestDanfossEventSensor:
@@ -209,12 +252,18 @@ class TestDanfossEventSensor:
         assert "latest_event_text" in sensor._attr_unique_id
         assert sensor._attr_icon == "mdi:alert-circle-outline"
 
+    def test_entity_category_diagnostic(self, mock_coordinator, mock_config_entry):
+        """EventSensor hat EntityCategory.DIAGNOSTIC."""
+        sensor = DanfossEventSensor(mock_coordinator, mock_config_entry)
+        assert sensor._attr_entity_category == EntityCategory.DIAGNOSTIC
+
 
 class TestDeviceInfo:
     def test_with_serial(self, mock_coordinator, mock_config_entry):
         info = _device_info(mock_coordinator, mock_config_entry)
         assert (DOMAIN, mock_config_entry.entry_id) in info["identifiers"]
         assert "TLX123456" in info["name"]
+        assert info["manufacturer"] == "Danfoss Solar Inverters"
 
     def test_without_serial(self, mock_coordinator_no_data, mock_config_entry):
         info = _device_info(mock_coordinator_no_data, mock_config_entry)

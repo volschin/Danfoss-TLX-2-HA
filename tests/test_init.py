@@ -3,7 +3,6 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
-from custom_components.danfoss_tlx.const import DOMAIN
 from custom_components.danfoss_tlx import async_setup_entry, async_unload_entry, PLATFORMS
 
 
@@ -18,7 +17,7 @@ class TestIntegrationSetup:
         result = await async_setup_entry(mock_hass, mock_config_entry)
 
         assert result is True
-        assert mock_config_entry.entry_id in mock_hass.data[DOMAIN]
+        assert mock_config_entry.runtime_data is mock_coordinator
         mock_hass.config_entries.async_forward_entry_setups.assert_awaited_once_with(
             mock_config_entry, PLATFORMS
         )
@@ -37,7 +36,6 @@ class TestIntegrationSetup:
         result = await async_unload_entry(mock_hass, mock_config_entry)
 
         assert result is True
-        assert mock_config_entry.entry_id not in mock_hass.data[DOMAIN]
 
     @pytest.mark.asyncio
     @patch("custom_components.danfoss_tlx.DanfossCoordinator")

@@ -1,7 +1,9 @@
 """DataUpdateCoordinator für Danfoss TLX Pro."""
+from __future__ import annotations
+
 import logging
 from datetime import timedelta
-from typing import Any, Dict, Optional
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -19,13 +21,13 @@ from .etherlynx import DanfossEtherLynx
 _LOGGER = logging.getLogger(__name__)
 
 
-class DanfossCoordinator(DataUpdateCoordinator):
+class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Koordiniert Datenabfragen vom Danfoss TLX Pro Inverter."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self._ip: str = entry.data[CONF_INVERTER_IP]
-        self._inverter_serial: Optional[str] = entry.data.get(CONF_INVERTER_SERIAL)
-        self._client: Optional[DanfossEtherLynx] = None
+        self._inverter_serial: str | None = entry.data.get(CONF_INVERTER_SERIAL)
+        self._client: DanfossEtherLynx | None = None
 
         interval = entry.options.get(
             CONF_SCAN_INTERVAL,
@@ -37,21 +39,22 @@ class DanfossCoordinator(DataUpdateCoordinator):
             _LOGGER,
             name=DOMAIN,
             update_interval=timedelta(seconds=interval),
+            config_entry=entry,
         )
 
     @property
-    def inverter_serial(self) -> Optional[str]:
+    def inverter_serial(self) -> str | None:
         """Seriennummer des Inverters."""
         return self._inverter_serial
 
-    async def _async_update_data(self) -> Dict[str, Any]:
+    async def _async_update_data(self) -> dict[str, Any]:
         """Holt Daten vom Inverter (wird im Executor-Thread ausgeführt)."""
         try:
             return await self.hass.async_add_executor_job(self._fetch_data)
         except Exception as err:
             raise UpdateFailed(f"Fehler beim Abrufen der Inverterdaten: {err}") from err
 
-    def _fetch_data(self) -> Dict[str, Any]:
+    def _fetch_data(self) -> dict[str, Any]:
         """Synchrone Datenabfrage (läuft im Thread-Pool)."""
         # Client initialisieren falls nötig
         if self._client is None:

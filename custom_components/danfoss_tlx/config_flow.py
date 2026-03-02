@@ -2,11 +2,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import voluptuous as vol
 
-from homeassistant import config_entries
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.core import callback
 
 from .const import (
@@ -23,16 +28,16 @@ from .etherlynx import DanfossEtherLynx
 _LOGGER = logging.getLogger(__name__)
 
 
-class DanfossConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class DanfossConfigFlow(ConfigFlow, domain=DOMAIN):
     """Config Flow für Danfoss TLX Pro."""
 
     VERSION = 1
 
     async def async_step_user(
-        self, user_input: Optional[Dict[str, Any]] = None
-    ) -> config_entries.FlowResult:
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Schritt 1: IP-Adresse und Grundkonfiguration."""
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             ip = user_input[CONF_INVERTER_IP].strip()
@@ -91,8 +96,64 @@ class DanfossConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Rekonfiguration: IP-Adresse und Seriennummer ändern."""
+        errors: dict[str, str] = {}
+        reconfigure_entry = self._get_reconfigure_entry()
+
+        if user_input is not None:
+            ip = user_input[CONF_INVERTER_IP].strip()
+            serial = user_input.get(CONF_INVERTER_SERIAL, "").strip()
+
+            try:
+                discovered = await self.hass.async_add_executor_job(
+                    self._try_connect, ip, serial
+                )
+                if discovered:
+                    serial = discovered
+                elif not serial:
+                    errors["base"] = "cannot_connect"
+            except RuntimeError as err:
+                if str(err) == "parameter_read_failed":
+                    errors["base"] = "cannot_read_parameters"
+                else:
+                    errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Verbindungsfehler zu %s", ip)
+                errors["base"] = "cannot_connect"
+
+            if not errors:
+                return self.async_update_reload_and_abort(
+                    reconfigure_entry,
+                    data={
+                        **reconfigure_entry.data,
+                        CONF_INVERTER_IP: ip,
+                        CONF_INVERTER_SERIAL: serial,
+                    },
+                )
+
+        current = reconfigure_entry.data
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_INVERTER_IP, default=current.get(CONF_INVERTER_IP, "")
+                ): str,
+                vol.Optional(
+                    CONF_INVERTER_SERIAL, default=current.get(CONF_INVERTER_SERIAL, "")
+                ): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=schema,
+            errors=errors,
+        )
+
     @staticmethod
-    def _try_connect(ip: str, serial: str) -> Optional[str]:
+    def _try_connect(ip: str, serial: str) -> str | None:
         """Versucht den Inverter zu erreichen und gibt die Seriennummer zurück.
 
         Prüft nach Discovery zusätzlich, ob Parameter gelesen werden können.
@@ -119,26 +180,23 @@ class DanfossConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
+        config_entry: ConfigEntry,
     ) -> DanfossOptionsFlow:
         """Gibt den Options Flow zurück."""
-        return DanfossOptionsFlow(config_entry)
+        return DanfossOptionsFlow()
 
 
-class DanfossOptionsFlow(config_entries.OptionsFlow):
+class DanfossOptionsFlow(OptionsFlow):
     """Options Flow für Danfoss TLX Pro."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self._config_entry = config_entry
-
     async def async_step_init(
-        self, user_input: Optional[Dict[str, Any]] = None
-    ) -> config_entries.FlowResult:
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Optionen bearbeiten."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current = self._config_entry.options
+        current = self.config_entry.options
 
         schema = vol.Schema(
             {
@@ -146,14 +204,14 @@ class DanfossOptionsFlow(config_entries.OptionsFlow):
                     CONF_SCAN_INTERVAL,
                     default=current.get(
                         CONF_SCAN_INTERVAL,
-                        self._config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+                        self.config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
                     ),
                 ): vol.All(int, vol.Range(min=5, max=3600)),
                 vol.Optional(
                     CONF_PV_STRINGS,
                     default=current.get(
                         CONF_PV_STRINGS,
-                        self._config_entry.data.get(CONF_PV_STRINGS, DEFAULT_PV_STRINGS),
+                        self.config_entry.data.get(CONF_PV_STRINGS, DEFAULT_PV_STRINGS),
                     ),
                 ): vol.In([2, 3]),
             }

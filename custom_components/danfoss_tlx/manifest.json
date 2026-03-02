@@ -4,8 +4,9 @@
   "codeowners": ["@volschin"],
   "config_flow": true,
   "documentation": "https://github.com/volschin/Danfoss-TLX-2-HA",
+  "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/volschin/Danfoss-TLX-2-HA/issues",
   "requirements": [],
-  "version": "0.4.0"
+  "version": "0.5.0"
 }

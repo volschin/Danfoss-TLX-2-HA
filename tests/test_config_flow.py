@@ -133,17 +133,74 @@ class TestDanfossConfigFlow:
                 DanfossConfigFlow._try_connect("192.168.1.100", "KNOWN_SER")
 
 
+class TestDanfossReconfigureFlow:
+    @pytest.mark.asyncio
+    async def test_reconfigure_shows_form(self, mock_hass, mock_config_entry):
+        """Reconfigure-Step zeigt Formular mit aktuellen Werten."""
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+        flow._get_reconfigure_entry = MagicMock(return_value=mock_config_entry)
+
+        result = await flow.async_step_reconfigure(None)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "reconfigure"
+
+    @pytest.mark.asyncio
+    async def test_reconfigure_updates_entry(self, mock_hass, mock_config_entry):
+        """Erfolgreiche Rekonfiguration aktualisiert den Eintrag."""
+        mock_hass.async_add_executor_job = AsyncMock(return_value="NEW_SER")
+
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+        flow._get_reconfigure_entry = MagicMock(return_value=mock_config_entry)
+        flow.async_update_reload_and_abort = MagicMock(return_value={"type": "abort"})
+
+        await flow.async_step_reconfigure({
+            CONF_INVERTER_IP: "192.168.1.200",
+            CONF_INVERTER_SERIAL: "",
+        })
+
+        flow.async_update_reload_and_abort.assert_called_once()
+        call_kwargs = flow.async_update_reload_and_abort.call_args
+        new_data = call_kwargs[1]["data"] if "data" in call_kwargs[1] else call_kwargs[0][1]
+        assert new_data[CONF_INVERTER_IP] == "192.168.1.200"
+        assert new_data[CONF_INVERTER_SERIAL] == "NEW_SER"
+
+    @pytest.mark.asyncio
+    async def test_reconfigure_connection_failure(self, mock_hass, mock_config_entry):
+        """Verbindungsfehler bei Rekonfiguration zeigt Fehler."""
+        mock_hass.async_add_executor_job = AsyncMock(return_value=None)
+
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+        flow._get_reconfigure_entry = MagicMock(return_value=mock_config_entry)
+
+        result = await flow.async_step_reconfigure({
+            CONF_INVERTER_IP: "192.168.1.200",
+            CONF_INVERTER_SERIAL: "",
+        })
+
+        assert result["type"] == "form"
+        assert result["errors"]["base"] == "cannot_connect"
+
+
 class TestDanfossOptionsFlow:
     @pytest.mark.asyncio
     async def test_shows_form_with_defaults(self, mock_config_entry):
-        flow = DanfossOptionsFlow(mock_config_entry)
+        flow = DanfossOptionsFlow()
+        flow._config_entry = mock_config_entry
+        # OptionsFlow greift über self.config_entry zu; setzen wir als Property
+        type(flow).config_entry = property(lambda self: self._config_entry)
         result = await flow.async_step_init(None)
         assert result["type"] == "form"
         assert result["step_id"] == "init"
 
     @pytest.mark.asyncio
     async def test_saves_updates(self, mock_config_entry):
-        flow = DanfossOptionsFlow(mock_config_entry)
+        flow = DanfossOptionsFlow()
+        flow._config_entry = mock_config_entry
+        type(flow).config_entry = property(lambda self: self._config_entry)
         flow.async_create_entry = MagicMock(return_value={"type": "create_entry"})
 
         await flow.async_step_init({

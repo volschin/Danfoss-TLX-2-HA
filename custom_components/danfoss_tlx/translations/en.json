@@ -10,6 +10,14 @@
           "pv_strings": "Number of PV Strings (2 or 3)",
           "scan_interval": "Polling Interval (seconds)"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Danfoss TLX Pro",
+        "description": "Change connection parameters. Leave the serial number blank to auto-discover it.",
+        "data": {
+          "inverter_ip": "Inverter IP Address",
+          "inverter_serial": "Serial Number (optional, auto-detected)"
+        }
       }
     },
     "error": {
@@ -17,7 +25,8 @@
       "cannot_read_parameters": "The inverter was discovered (serial found), but parameter data could not be read. Possible causes: firmware incompatibility, different device type. Please check Home Assistant logs."
     },
     "abort": {
-      "already_configured": "This inverter is already configured."
+      "already_configured": "This inverter is already configured.",
+      "reconfigure_successful": "Reconfiguration successful."
     }
   },
   "options": {

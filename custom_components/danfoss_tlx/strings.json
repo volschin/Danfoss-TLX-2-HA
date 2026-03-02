@@ -10,6 +10,14 @@
           "pv_strings": "Anzahl PV-Strings (2 oder 3)",
           "scan_interval": "Abfrageintervall in Sekunden"
         }
+      },
+      "reconfigure": {
+        "title": "Danfoss TLX Pro rekonfigurieren",
+        "description": "Verbindungsparameter ändern. Die Seriennummer wird automatisch erkannt wenn das Feld leer gelassen wird.",
+        "data": {
+          "inverter_ip": "IP-Adresse des Wechselrichters",
+          "inverter_serial": "Seriennummer (optional, automatische Erkennung)"
+        }
       }
     },
     "error": {
@@ -17,7 +25,8 @@
       "cannot_read_parameters": "Der Wechselrichter wurde erkannt (Seriennummer gefunden), liefert aber keine Parameterdaten. Mögliche Ursachen: Firmware-Inkompatibilität, anderer Gerätetyp. Bitte Home Assistant Logs prüfen."
     },
     "abort": {
-      "already_configured": "Dieser Wechselrichter ist bereits konfiguriert."
+      "already_configured": "Dieser Wechselrichter ist bereits konfiguriert.",
+      "reconfigure_successful": "Rekonfiguration erfolgreich."
     }
   },
   "options": {

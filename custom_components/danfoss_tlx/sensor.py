@@ -1,11 +1,11 @@
 """Sensor-Plattform für Danfoss TLX Pro."""
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EntityCategory
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -13,20 +13,44 @@ from .const import DOMAIN, CONF_PV_STRINGS
 from .coordinator import DanfossCoordinator
 from .etherlynx import TLX_PARAMETERS, get_operation_mode_text, get_event_text, ParameterDef
 
+if TYPE_CHECKING:
+    from . import DanfossTLXConfigEntry
+
+# Sensor-Updates werden vom Coordinator koordiniert
+PARALLEL_UPDATES = 0
+
 # Temperatur-Sentinel: Werte >= 120°C bedeuten "kein Sensor angeschlossen"
 TEMP_SENTINEL_THRESHOLD = 120
 
 # Parameter die einen optionalen externen Sensor erfordern
 _OPTIONAL_SENSOR_KEYS = {"ambient_temp", "pv_array_temp", "irradiance", "hardware_type"}
 
+# Diagnose-Sensoren (Status/System-Info)
+_DIAGNOSTIC_KEYS = {
+    "operation_mode", "latest_event", "hardware_type",
+    "nominal_power", "sw_version",
+}
+
+# Nachkommastellen je nach Skalierung
+_PRECISION_MAP: dict[str, int] = {}
+for _key, _param in TLX_PARAMETERS.items():
+    if _param.scale == 0.001:
+        _PRECISION_MAP[_key] = 2
+    elif _param.scale == 0.01:
+        _PRECISION_MAP[_key] = 2
+    elif _param.scale == 0.1:
+        _PRECISION_MAP[_key] = 1
+    elif _param.scale == 1.0 and _param.unit in ("W", "Wh", "W/m²", "mA"):
+        _PRECISION_MAP[_key] = 0
+
 
 async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
+    hass: Any,
+    entry: DanfossTLXConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Richtet Sensor-Entities ein."""
-    coordinator: DanfossCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: DanfossCoordinator = entry.runtime_data
     pv_strings = entry.data.get(CONF_PV_STRINGS, 2)
 
     entities: list[SensorEntity] = []
@@ -46,18 +70,18 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-def _device_info(coordinator: DanfossCoordinator, entry: ConfigEntry) -> Dict[str, Any]:
+def _device_info(coordinator: DanfossCoordinator, entry: DanfossTLXConfigEntry) -> DeviceInfo:
     """Gemeinsame Geräteinformationen für das HA-Geräteregister."""
     serial = coordinator.inverter_serial or entry.entry_id
-    return {
-        "identifiers": {(DOMAIN, entry.entry_id)},
-        "name": f"Danfoss TLX Pro ({serial})",
-        "manufacturer": "Danfoss Solar Inverters",
-        "model": "TLX Pro",
-    }
+    return DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name=f"Danfoss TLX Pro ({serial})",
+        manufacturer="Danfoss Solar Inverters",
+        model="TLX Pro",
+    )
 
 
-class DanfossSensor(CoordinatorEntity, SensorEntity):
+class DanfossSensor(CoordinatorEntity[DanfossCoordinator], SensorEntity):
     """Sensor für einen Danfoss TLX Pro Parameter."""
 
     _attr_has_entity_name = True
@@ -65,7 +89,7 @@ class DanfossSensor(CoordinatorEntity, SensorEntity):
     def __init__(
         self,
         coordinator: DanfossCoordinator,
-        entry: ConfigEntry,
+        entry: DanfossTLXConfigEntry,
         key: str,
         param: ParameterDef,
     ) -> None:
@@ -79,6 +103,12 @@ class DanfossSensor(CoordinatorEntity, SensorEntity):
             self._attr_device_class = param.device_class
         if param.state_class:
             self._attr_state_class = param.state_class
+        # Nachkommastellen
+        if key in _PRECISION_MAP:
+            self._attr_suggested_display_precision = _PRECISION_MAP[key]
+        # Diagnose-Sensoren
+        if key in _DIAGNOSTIC_KEYS:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
         # Optionale externe Sensoren standardmäßig ausblenden
         if key in _OPTIONAL_SENSOR_KEYS:
             self._attr_entity_registry_enabled_default = False
@@ -96,27 +126,28 @@ class DanfossSensor(CoordinatorEntity, SensorEntity):
         return True
 
     @property
-    def native_value(self) -> Optional[float]:
+    def native_value(self) -> float | None:
         """Aktueller Sensorwert."""
         if self.coordinator.data:
             return self.coordinator.data.get(self._key)
         return None
 
     @property
-    def device_info(self) -> Dict[str, Any]:
+    def device_info(self) -> DeviceInfo:
         """Geräteinformationen für das HA-Geräteregister."""
         return _device_info(self.coordinator, self._entry)
 
 
-class DanfossOperationModeSensor(CoordinatorEntity, SensorEntity):
+class DanfossOperationModeSensor(CoordinatorEntity[DanfossCoordinator], SensorEntity):
     """Text-Sensor für den Betriebsmodus des Wechselrichters."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
         coordinator: DanfossCoordinator,
-        entry: ConfigEntry,
+        entry: DanfossTLXConfigEntry,
     ) -> None:
         super().__init__(coordinator)
         self._entry = entry
@@ -125,7 +156,7 @@ class DanfossOperationModeSensor(CoordinatorEntity, SensorEntity):
         self._attr_icon = "mdi:solar-power"
 
     @property
-    def native_value(self) -> Optional[str]:
+    def native_value(self) -> str | None:
         """Betriebsmodus als lesbarer Text."""
         if self.coordinator.data:
             mode_id = self.coordinator.data.get("operation_mode")
@@ -134,20 +165,21 @@ class DanfossOperationModeSensor(CoordinatorEntity, SensorEntity):
         return None
 
     @property
-    def device_info(self) -> Dict[str, Any]:
+    def device_info(self) -> DeviceInfo:
         """Geräteinformationen für das HA-Geräteregister."""
         return _device_info(self.coordinator, self._entry)
 
 
-class DanfossEventSensor(CoordinatorEntity, SensorEntity):
+class DanfossEventSensor(CoordinatorEntity[DanfossCoordinator], SensorEntity):
     """Text-Sensor für das letzte Ereignis/Fehlercode des Wechselrichters."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
         coordinator: DanfossCoordinator,
-        entry: ConfigEntry,
+        entry: DanfossTLXConfigEntry,
     ) -> None:
         super().__init__(coordinator)
         self._entry = entry
@@ -156,7 +188,7 @@ class DanfossEventSensor(CoordinatorEntity, SensorEntity):
         self._attr_icon = "mdi:alert-circle-outline"
 
     @property
-    def native_value(self) -> Optional[str]:
+    def native_value(self) -> str | None:
         """Letztes Ereignis als lesbarer Text."""
         if self.coordinator.data:
             event_id = self.coordinator.data.get("latest_event")
@@ -165,6 +197,6 @@ class DanfossEventSensor(CoordinatorEntity, SensorEntity):
         return None
 
     @property
-    def device_info(self) -> Dict[str, Any]:
+    def device_info(self) -> DeviceInfo:
         """Geräteinformationen für das HA-Geräteregister."""
         return _device_info(self.coordinator, self._entry)

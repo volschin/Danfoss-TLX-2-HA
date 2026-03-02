@@ -10,6 +10,8 @@ from custom_components.danfoss_tlx.sensor import (
     DanfossSensor,
     DanfossOperationModeSensor,
     _device_info,
+    TEMP_SENTINEL_THRESHOLD,
+    _OPTIONAL_SENSOR_KEYS,
 )
 
 
@@ -96,6 +98,41 @@ class TestDanfossSensor:
         param = TLX_PARAMETERS["operation_mode"]
         sensor = DanfossSensor(mock_coordinator, mock_config_entry, "operation_mode", param)
         assert sensor._attr_native_unit_of_measurement is None
+
+    def test_temp_sentinel_unavailable(self, mock_config_entry):
+        """Temperatur >= 120°C wird als unavailable markiert."""
+        coordinator = MagicMock()
+        coordinator.data = {"ambient_temp": 124.0}
+        param = TLX_PARAMETERS["ambient_temp"]
+        sensor = DanfossSensor(coordinator, mock_config_entry, "ambient_temp", param)
+        assert sensor.available is False
+
+    def test_temp_normal_value_available(self, mock_coordinator, mock_config_entry):
+        """Plausible Temperatur (25°C) ist available."""
+        param = TLX_PARAMETERS["ambient_temp"]
+        sensor = DanfossSensor(mock_coordinator, mock_config_entry, "ambient_temp", param)
+        assert sensor.available is True
+
+    def test_temp_sentinel_127_unavailable(self, mock_config_entry):
+        """Temperatur-Sentinel 127°C ist unavailable."""
+        coordinator = MagicMock()
+        coordinator.data = {"pv_array_temp": 127.0}
+        param = TLX_PARAMETERS["pv_array_temp"]
+        sensor = DanfossSensor(coordinator, mock_config_entry, "pv_array_temp", param)
+        assert sensor.available is False
+
+    def test_optional_sensors_disabled_by_default(self, mock_coordinator, mock_config_entry):
+        """Optionale externe Sensoren sind standardmäßig ausgeblendet."""
+        for key in _OPTIONAL_SENSOR_KEYS:
+            param = TLX_PARAMETERS[key]
+            sensor = DanfossSensor(mock_coordinator, mock_config_entry, key, param)
+            assert sensor._attr_entity_registry_enabled_default is False
+
+    def test_normal_sensor_enabled_by_default(self, mock_coordinator, mock_config_entry):
+        """Normale Sensoren haben kein entity_registry_enabled_default gesetzt."""
+        param = TLX_PARAMETERS["grid_power_total"]
+        sensor = DanfossSensor(mock_coordinator, mock_config_entry, "grid_power_total", param)
+        assert not hasattr(sensor, "_attr_entity_registry_enabled_default")
 
 
 class TestDanfossOperationModeSensor:

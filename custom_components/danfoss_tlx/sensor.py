@@ -13,6 +13,12 @@ from .const import DOMAIN, CONF_PV_STRINGS
 from .coordinator import DanfossCoordinator
 from .etherlynx import TLX_PARAMETERS, OPERATION_MODES, ParameterDef
 
+# Temperatur-Sentinel: Werte >= 120°C bedeuten "kein Sensor angeschlossen"
+TEMP_SENTINEL_THRESHOLD = 120
+
+# Parameter die einen optionalen externen Sensor erfordern
+_OPTIONAL_SENSOR_KEYS = {"ambient_temp", "pv_array_temp", "irradiance"}
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -68,6 +74,21 @@ class DanfossSensor(CoordinatorEntity, SensorEntity):
             self._attr_device_class = param.device_class
         if param.state_class:
             self._attr_state_class = param.state_class
+        # Optionale externe Sensoren standardmäßig ausblenden
+        if key in _OPTIONAL_SENSOR_KEYS:
+            self._attr_entity_registry_enabled_default = False
+
+    @property
+    def available(self) -> bool:
+        """Sensor als unavailable markieren bei Sentinel-Werten."""
+        if not super().available:
+            return False
+        # Temperatur-Sentinel: >= 120°C = kein physischer Sensor
+        if self._key in ("ambient_temp", "pv_array_temp") and self.coordinator.data:
+            value = self.coordinator.data.get(self._key)
+            if value is not None and value >= TEMP_SENTINEL_THRESHOLD:
+                return False
+        return True
 
     @property
     def native_value(self) -> Optional[float]:

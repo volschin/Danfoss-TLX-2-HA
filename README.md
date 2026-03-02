@@ -1,5 +1,10 @@
 # Danfoss TLX Pro → Home Assistant (EtherLynx/UDP)
 
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=volschin&repository=Danfoss-TLX-2-HA&category=integration)
+[![GitHub Release](https://img.shields.io/github/v/release/volschin/Danfoss-TLX-2-HA?style=for-the-badge)](https://github.com/volschin/Danfoss-TLX-2-HA/releases)
+[![License](https://img.shields.io/github/license/volschin/Danfoss-TLX-2-HA?style=for-the-badge)](LICENSE)
+
 Direkte Anbindung des Danfoss TLX Pro Wechselrichters an Home Assistant
 über das **EtherLynx-Protokoll** (UDP Port 48004) – ohne zusätzliche
 Hardware wie ESP32 oder RS485-Adapter.

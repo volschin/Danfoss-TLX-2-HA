@@ -11,12 +11,12 @@
 # Entity-IDs anpassen:
 #   HA generiert entity_ids nach dem Muster:
 #     sensor.<geraetename>_<sensorname>
-#   z.B. sensor.danfoss_tlx_pro_tlx123456_netzleistung_gesamt
+#   z.B. sensor.danfoss_tlx_pro_tlx_123456_netzleistung_gesamt
 #
-#   Dieses Dashboard verwendet Platzhalter OHNE Seriennummer:
-#     sensor.danfoss_tlx_pro_netzleistung_gesamt
+#   Dieses Dashboard verwendet Platzhalter mit Platzhalter-Seriennummer:
+#     sensor.danfoss_tlx_pro_<SERIAL>_netzleistung_gesamt
 #
-#   Suche-und-Ersetze: "sensor.danfoss_tlx_pro_" → "sensor.danfoss_tlx_pro_DEINE_SERIAL_"
+#   Suche-und-Ersetze: "sensor.danfoss_tlx_pro_<SERIAL>_" → "sensor.danfoss_tlx_pro_DEINE_SERIAL_"
 #   Deine Entity-IDs findest du unter Einstellungen > Geraete > Danfoss TLX Pro.
 #
 # Voraussetzung: Danfoss TLX Pro Integration (2 PV-Strings Konfiguration)
@@ -38,27 +38,42 @@ views:
             heading: Status
             heading_style: title
             icon: mdi:solar-power-variant
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_betriebsmodus
+            grid_options:
+              columns: full
+              rows: 1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_betriebsmodus_2
             name: Betriebsmodus
             icon: mdi:solar-power
             color: green
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_software_version
+            name: Firmware
+            icon: mdi:chip
             grid_options:
               columns: 6
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_letztes_ereignis
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_nennleistung
+            name: Nennleistung
+            icon: mdi:flash
+            grid_options:
+              columns: 3
+              rows: 1
+          - type: tile
+            grid_options:
+              columns: 12
+              rows: 1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_letztes_ereignis_2
             name: Letztes Ereignis
             icon: mdi:alert-circle-outline
             color: amber
-            grid_options:
-              columns: 6
-              rows: 1
-
+            vertical: false
+            features_position: bottom
           - type: gauge
-            entity: sensor.danfoss_tlx_pro_netzleistung_gesamt
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzleistung_gesamt
             name: Aktuelle Leistung
             unit: W
             needle: true
@@ -71,19 +86,10 @@ views:
             grid_options:
               columns: 6
               rows: 4
-
           - type: entity
-            entity: sensor.danfoss_tlx_pro_netzfrequenz_o
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzfrequenz_o
             name: Netzfrequenz
             icon: mdi:sine-wave
-            grid_options:
-              columns: 3
-              rows: 1
-
-          - type: entity
-            entity: sensor.danfoss_tlx_pro_nennleistung
-            name: Nennleistung
-            icon: mdi:flash
             grid_options:
               columns: 3
               rows: 1
@@ -97,9 +103,15 @@ views:
             heading: Energieproduktion
             heading_style: title
             icon: mdi:lightning-bolt
-
+          - type: entity
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_gesamtproduktion
+            name: Gesamt (Lifetime)
+            icon: mdi:counter
+            grid_options:
+              columns: full
+              rows: 1
           - type: statistic
-            entity: sensor.danfoss_tlx_pro_netzenergie_heute_gesamt
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzenergie_heute_gesamt
             period:
               calendar:
                 period: day
@@ -109,9 +121,8 @@ views:
             grid_options:
               columns: 3
               rows: 1
-
           - type: statistic
-            entity: sensor.danfoss_tlx_pro_produktion_diese_woche
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_produktion_diese_woche
             period:
               calendar:
                 period: week
@@ -121,9 +132,8 @@ views:
             grid_options:
               columns: 3
               rows: 1
-
           - type: statistic
-            entity: sensor.danfoss_tlx_pro_produktion_diesen_monat
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_produktion_diesen_monat
             period:
               calendar:
                 period: month
@@ -133,9 +143,8 @@ views:
             grid_options:
               columns: 3
               rows: 1
-
           - type: statistic
-            entity: sensor.danfoss_tlx_pro_produktion_dieses_jahr
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_produktion_dieses_jahr
             period:
               calendar:
                 period: year
@@ -145,28 +154,11 @@ views:
             grid_options:
               columns: 3
               rows: 1
-
-          - type: entity
-            entity: sensor.danfoss_tlx_pro_gesamtproduktion
-            name: Gesamt (Lifetime)
-            icon: mdi:counter
-            grid_options:
-              columns: 6
-              rows: 1
-
-          - type: entity
-            entity: sensor.danfoss_tlx_pro_software_version
-            name: Firmware
-            icon: mdi:chip
-            grid_options:
-              columns: 6
-              rows: 1
-
           - type: history-graph
             title: Leistungsverlauf heute
             hours_to_show: 24
             entities:
-              - entity: sensor.danfoss_tlx_pro_netzleistung_gesamt
+              - entity: sensor.danfoss_tlx_pro_<SERIAL>_netzleistung_gesamt
                 name: Gesamtleistung
             grid_options:
               columns: 12
@@ -181,85 +173,74 @@ views:
             heading: PV-Strings (DC)
             heading_style: title
             icon: mdi:solar-panel-large
-
-          # String 1
           - type: heading
             heading: String 1
             heading_style: subtitle
             icon: mdi:numeric-1-circle
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_pv_leistung_string_1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_leistung_string_1
             name: Leistung
             icon: mdi:flash
             color: orange
             grid_options:
               columns: 4
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_pv_spannung_string_1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_spannung_string_1
             name: Spannung
             icon: mdi:sine-wave
             color: blue
             grid_options:
               columns: 4
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_pv_strom_string_1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_strom_string_1
             name: Strom
             icon: mdi:current-dc
             color: cyan
             grid_options:
               columns: 4
               rows: 1
-
-          # String 2
           - type: heading
             heading: String 2
             heading_style: subtitle
             icon: mdi:numeric-2-circle
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_pv_leistung_string_2
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_leistung_string_2
             name: Leistung
             icon: mdi:flash
             color: orange
             grid_options:
               columns: 4
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_pv_spannung_string_2
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_spannung_string_2
             name: Spannung
             icon: mdi:sine-wave
             color: blue
             grid_options:
               columns: 4
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_pv_strom_string_2
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_strom_string_2
             name: Strom
             icon: mdi:current-dc
             color: cyan
             grid_options:
               columns: 4
               rows: 1
-
           - type: history-graph
             title: Stringvergleich
             hours_to_show: 24
             entities:
-              - entity: sensor.danfoss_tlx_pro_pv_leistung_string_1
+              - entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_leistung_string_1
                 name: String 1
-              - entity: sensor.danfoss_tlx_pro_pv_leistung_string_2
+              - entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_leistung_string_2
                 name: String 2
             grid_options:
               columns: 12
               rows: 3
-
+      
       # ================================================================
       # BEREICH 4: Netz (AC-Seite)
       # ================================================================
@@ -269,140 +250,128 @@ views:
             heading: Netz (AC)
             heading_style: title
             icon: mdi:transmission-tower
-
-          # Phase L1
           - type: heading
             heading: Phase L1
             heading_style: subtitle
             icon: mdi:alpha-l-circle
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_netzleistung_l1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzleistung_l1
             name: Leistung
             icon: mdi:flash
             color: red
             grid_options:
               columns: 4
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_netzspannung_l1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzspannung_l1
             name: Spannung
             icon: mdi:sine-wave
             color: blue
             grid_options:
               columns: 4
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_netzstrom_l1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzstrom_l1
             name: Strom
             icon: mdi:current-ac
             color: cyan
             grid_options:
               columns: 4
               rows: 1
-
-          # Phase L2
+          - type: tile
+            grid_options:
+              columns: 4
+              rows: 1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzfrequenz_l1
+            name: Frequenz
+            icon: mdi:sine-wave
+            vertical: false
+            features_position: bottom
           - type: heading
             heading: Phase L2
             heading_style: subtitle
             icon: mdi:alpha-l-circle
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_netzleistung_l2
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzleistung_l2
             name: Leistung
             icon: mdi:flash
             color: red
             grid_options:
               columns: 4
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_netzspannung_l2
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzspannung_l2
             name: Spannung
             icon: mdi:sine-wave
             color: blue
             grid_options:
               columns: 4
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_netzstrom_l2
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzstrom_l2
             name: Strom
             icon: mdi:current-ac
             color: cyan
             grid_options:
               columns: 4
               rows: 1
-
-          # Phase L3
+          - type: tile
+            grid_options:
+              columns: 4
+              rows: 1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzfrequenz_l2
+            name: Frequenz
+            icon: mdi:sine-wave
+            vertical: false
+            features_position: bottom
           - type: heading
             heading: Phase L3
             heading_style: subtitle
             icon: mdi:alpha-l-circle
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_netzleistung_l3
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzleistung_l3
             name: Leistung
             icon: mdi:flash
             color: red
             grid_options:
               columns: 4
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_netzspannung_l3
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzspannung_l3
             name: Spannung
             icon: mdi:sine-wave
             color: blue
             grid_options:
               columns: 4
               rows: 1
-
           - type: tile
-            entity: sensor.danfoss_tlx_pro_netzstrom_l3
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzstrom_l3
             name: Strom
             icon: mdi:current-ac
             color: cyan
             grid_options:
               columns: 4
               rows: 1
-
+          - type: tile
+            grid_options:
+              columns: 4
+              rows: 1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzfrequenz_l3
+            name: Frequenz
+            icon: mdi:sine-wave
+            vertical: false
+            features_position: bottom
           - type: history-graph
             title: Netzspannung (3 Phasen)
             hours_to_show: 24
             entities:
-              - entity: sensor.danfoss_tlx_pro_netzspannung_l1
+              - entity: sensor.danfoss_tlx_pro_<SERIAL>_netzspannung_l1
                 name: L1
-              - entity: sensor.danfoss_tlx_pro_netzspannung_l2
+              - entity: sensor.danfoss_tlx_pro_<SERIAL>_netzspannung_l2
                 name: L2
-              - entity: sensor.danfoss_tlx_pro_netzspannung_l3
+              - entity: sensor.danfoss_tlx_pro_<SERIAL>_netzspannung_l3
                 name: L3
             grid_options:
               columns: 12
               rows: 3
 
-          - type: entity
-            entity: sensor.danfoss_tlx_pro_netzfrequenz_l1
-            name: Frequenz L1
-            icon: mdi:sine-wave
-            grid_options:
-              columns: 4
-              rows: 1
-
-          - type: entity
-            entity: sensor.danfoss_tlx_pro_netzfrequenz_l2
-            name: Frequenz L2
-            icon: mdi:sine-wave
-            grid_options:
-              columns: 4
-              rows: 1
-
-          - type: entity
-            entity: sensor.danfoss_tlx_pro_netzfrequenz_l3
-            name: Frequenz L3
-            icon: mdi:sine-wave
-            grid_options:
-              columns: 4
-              rows: 1

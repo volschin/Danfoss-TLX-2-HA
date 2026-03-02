@@ -64,6 +64,26 @@ Die Integration prüft beim Setup sowohl die Erreichbarkeit als auch das Lesen v
 
 - Hardware-Typ, Nennleistung, Software-Version, Seriennummer
 
+## 📋 Dashboard
+
+Ein fertiges Inverter-Dashboard für HA 2026.2 (Sections-View) liegt unter [`dashboards/danfoss-tlx-inverter.yaml`](dashboards/danfoss-tlx-inverter.yaml).
+
+<details>
+<summary>Dashboard einrichten</summary>
+
+1. **Einstellungen** > **Dashboards** > **Dashboard hinzufügen**
+2. Dashboard öffnen > **Bearbeiten** (Stift-Icon) > **Roher Konfigurationseditor**
+3. Inhalt der YAML-Datei einfügen
+4. **Entity-IDs anpassen**: Ersetze `sensor.danfoss_tlx_pro_` durch dein tatsächliches Entity-Prefix (findbar unter Einstellungen > Geräte > Danfoss TLX Pro)
+
+</details>
+
+**Enthaltene Bereiche:**
+- **Status & Leistung** — Betriebsmodus, Gauge mit aktueller Leistung, Netzfrequenz
+- **Energieproduktion** — Heute / Woche / Monat / Jahr / Gesamt + Leistungsverlauf
+- **PV-Strings (DC)** — Spannung, Strom, Leistung pro String + Vergleichsgraph
+- **Netz (AC)** — Spannung, Strom, Leistung pro Phase L1/L2/L3 + Spannungsverlauf
+
 ## 🏗️ Architektur
 
 ```mermaid

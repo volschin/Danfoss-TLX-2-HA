@@ -430,7 +430,7 @@ TLX_PARAMETERS: Dict[str, ParameterDef] = {
     # ── Systeminfo (Index 0x1E, 0x32, 0x3C, 0x46, 0x47) ──────────────
     "hardware_type": ParameterDef(
         name="Hardware-Typ",
-        index=0x1E, subindex=0x14, data_type=DataType.UNSIGNED8,
+        index=0x1E, subindex=0x14, data_type=DataType.UNSIGNED32,
         module_id=MODULE_COMM_BOARD, unit="", scale=1.0,
         description="Hardware Type ID (6=10kW, 7=12.5kW, 8=15kW)",
     ),

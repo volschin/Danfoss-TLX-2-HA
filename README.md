@@ -7,28 +7,30 @@ Hardware wie ESP32 oder RS485-Adapter.
 ## Architektur
 
 ```
-┌──────────────────────┐                    ┌──────────────────┐
-│   Home Assistant      │   UDP Port 48004   │  Danfoss TLX Pro │
-│                       │◄──────────────────►│                  │
-│  ┌─────────────────┐  │   Ethernet / LAN   │  Communication   │
-│  │ danfoss_ha_     │  │                    │  Board (#8)      │
-│  │ bridge.py       │  │  Ping → Discovery  │                  │
-│  │                 │  │  Get Parameters →  │  Ethernet Port   │
-│  │  → MQTT oder    │  │  ← Values          │                  │
-│  │  → JSON stdout  │  │                    └──────────────────┘
-│  └────────┬────────┘  │
-│           │           │
-│  ┌────────▼────────┐  │
-│  │ MQTT Broker     │  │  (Variante A)
-│  │ (Mosquitto)     │  │
-│  │ Auto-Discovery  │  │
-│  └────────┬────────┘  │
-│           │           │
-│  ┌────────▼────────┐  │
-│  │ HA Sensoren     │  │  40+ Sensoren automatisch
-│  │ Energy Dashboard│  │
-│  └─────────────────┘  │
-└──────────────────────┘
++------------------------+                   +------------------+
+|  Home Assistant        |  UDP Port 48004   |  Danfoss TLX Pro |
+|                        |<================>|                  |
+|  +------------------+  |  Ethernet / LAN   |  Communication   |
+|  | danfoss_ha_      |  |                   |  Board (#8)      |
+|  | bridge.py        |  |  Ping -> Discovery|                  |
+|  |                  |  |  Get Parameters ->|  Ethernet Port   |
+|  |  -> MQTT oder    |  |  <- Values        |                  |
+|  |  -> JSON stdout  |  |                   +------------------+
+|  +--------+---------+  |
+|           |             |
+|           v             |
+|  +------------------+   |
+|  | MQTT Broker      |   |  (Variante A)
+|  | (Mosquitto)      |   |
+|  | Auto-Discovery   |   |
+|  +--------+---------+   |
+|           |              |
+|           v              |
+|  +------------------+    |
+|  | HA Sensoren      |    |  40+ Sensoren automatisch
+|  | Energy Dashboard |    |
+|  +------------------+    |
++--------------------------+
 ```
 
 ## Voraussetzungen

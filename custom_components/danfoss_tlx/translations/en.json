@@ -13,7 +13,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the inverter. Please check the IP address and ensure the inverter is powered on and connected via Ethernet."
+      "cannot_connect": "Failed to connect to the inverter. Please check the IP address and ensure the inverter is powered on and connected via Ethernet.",
+      "cannot_read_parameters": "The inverter was discovered (serial found), but parameter data could not be read. Possible causes: firmware incompatibility, different device type. Please check Home Assistant logs."
     },
     "abort": {
       "already_configured": "This inverter is already configured."

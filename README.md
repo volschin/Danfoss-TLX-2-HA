@@ -145,7 +145,7 @@ Basierend auf dem offiziellen Danfoss User Guide:
 - **Adressierung:** Seriennummer des Inverters
 - **Nachrichtentypen:** Ping (0x01), Get/Set Parameter (0x02), Get/Set Text (0x03)
 - **Parameter-Zugriff:** Index/Subindex, Module ID 8 (Communication Board)
-- **Byte-Order:** Little-Endian (Intel-Format) für Parameterwerte
+- **Byte-Order:** Header-Felder Big-Endian, Parameterwerte Big-Endian rechts-aligniert im 4-Byte-Feld, Payload num_params Little-Endian
 - **Mehrere Parameter pro Request** möglich (Batch-Abfrage)
 
 ## Troubleshooting
@@ -176,6 +176,49 @@ automatisch wieder aktualisiert.
 1. MQTT-Integration in HA aktiviert?
 1. Discovery-Prefix korrekt? (default: `homeassistant`)
 1. Logs prüfen: `sudo journalctl -u danfoss_etherlynx -f`
+
+## Fehleranalyse und Diagnose
+
+### Diagnose-Kommandos
+
+```bash
+# Discovery-Test: Ist der Inverter erreichbar?
+python3 danfoss_etherlynx.py 192.168.1.100 --mode discover
+
+# Alle Parameter lesen (mit Debug-Ausgabe):
+python3 danfoss_etherlynx.py 192.168.1.100 --mode all -v
+```
+
+### Seriennummer erkannt, aber keine Daten
+
+Wenn der Discovery (Ping) funktioniert, aber `--mode all` keine Parameterwerte
+liefert, kann das folgende Ursachen haben:
+
+- **Firmware-Unterschiede:** Verschiedene TLX-Pro-Firmwareversionen können
+  leicht abweichende Protokoll-Details haben.
+- **Gerätetyp:** TLX 6k/8k/10k/12.5k/15k können unterschiedliche Parameter
+  unterstützen.
+- **Protokoll-Timing:** Manche Inverter brauchen längere Timeouts.
+
+### Gerätetyp-Unterschiede
+
+Der TLX Pro ist in verschiedenen Leistungsklassen verfügbar (6k bis 15k).
+Nicht alle Modelle unterstützen identische Parameter. Insbesondere:
+
+- **PV-String 3** ist nur bei TLX 10k/12.5k/15k vorhanden
+- **Sentinel-Werte:** Temperatursensoren liefern 127°C wenn kein physischer
+  Sensor angeschlossen ist — dieser Wert wird als "kein Sensor" interpretiert
+
+### E2E-Test ausführen
+
+Für die Diagnose mit einem echten Inverter steht ein End-to-End-Test bereit:
+
+```bash
+INVERTER_IP=192.168.1.100 python -m pytest tests/test_e2e_inverter.py -v -s
+```
+
+Dieser Test prüft Discovery, Parameter-Lesen und Wertebereiche gegen einen
+echten Inverter und hilft bei der Fehlereingrenzung.
 
 ## Vergleich: EtherLynx vs. RS485/ESP32
 

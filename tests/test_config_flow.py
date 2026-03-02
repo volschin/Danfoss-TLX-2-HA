@@ -65,6 +65,7 @@ class TestDanfossConfigFlow:
     def test_try_connect_with_serial(self):
         with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
             mock_client = MagicMock()
+            mock_client.read_parameters.return_value = {"grid_power_total": 1000}
             mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
             mock_cls.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -72,18 +73,64 @@ class TestDanfossConfigFlow:
 
             assert result == "KNOWN_SER"
             mock_client.discover.assert_not_called()
+            mock_client.read_parameters.assert_called_once()
 
     def test_try_connect_without_serial(self):
         with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
             mock_client = MagicMock()
             mock_client.discover.return_value = "DISCOVERED"
+            mock_client.read_parameters.return_value = {"grid_power_total": 1000}
             mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
             mock_cls.return_value.__exit__ = MagicMock(return_value=False)
 
             result = DanfossConfigFlow._try_connect("192.168.1.100", "")
 
             mock_client.discover.assert_called_once()
+            mock_client.read_parameters.assert_called_once()
             assert result == "DISCOVERED"
+
+    def test_try_connect_parameter_read_fails(self):
+        """Parameter-Read schlägt fehl → RuntimeError."""
+        with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.discover.return_value = "DISCOVERED"
+            mock_client.read_parameters.return_value = {}
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+            with pytest.raises(RuntimeError, match="parameter_read_failed"):
+                DanfossConfigFlow._try_connect("192.168.1.100", "")
+
+    @pytest.mark.asyncio
+    async def test_parameter_read_failure_shows_error(self, mock_hass):
+        """Parameter-Read-Fehler zeigt cannot_read_parameters Error."""
+        mock_hass.async_add_executor_job = AsyncMock(
+            side_effect=RuntimeError("parameter_read_failed")
+        )
+
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+
+        result = await flow.async_step_user({
+            CONF_INVERTER_IP: "192.168.1.100",
+            CONF_INVERTER_SERIAL: "",
+            CONF_PV_STRINGS: 2,
+            CONF_SCAN_INTERVAL: 15,
+        })
+
+        assert result["type"] == "form"
+        assert result["errors"]["base"] == "cannot_read_parameters"
+
+    def test_try_connect_with_serial_parameter_read_fails(self):
+        """Parameter-Read schlägt fehl bei bekannter Seriennummer."""
+        with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.read_parameters.return_value = {}
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+            with pytest.raises(RuntimeError, match="parameter_read_failed"):
+                DanfossConfigFlow._try_connect("192.168.1.100", "KNOWN_SER")
 
 
 class TestDanfossOptionsFlow:

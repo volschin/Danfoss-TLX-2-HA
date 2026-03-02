@@ -115,9 +115,8 @@ class TestBuildHeader:
 
     def test_data_offset_field(self):
         header = _build_header("S", "D", 0, 0, 1, 0)
-        # Byte 36: data offset (0x0D) shifted left by 3
-        expected = (ETHERLYNX_DATA_OFFSET & 0x1F) << 3
-        assert header[36] == expected
+        # Byte 36: data offset als roher Wert (0x0D)
+        assert header[36] == ETHERLYNX_DATA_OFFSET
 
 
 # ============================================================================
@@ -174,7 +173,8 @@ class TestBuildGetParametersPacket:
         params = [self._make_param(0x01, i) for i in range(3)]
         packet = build_get_parameters_packet("SRC", "DST", params)
         payload = packet[ETHERLYNX_HEADER_SIZE:]
-        count = struct.unpack('>I', payload[0:4])[0]
+        # Parameteranzahl als Little-Endian 32-bit
+        count = struct.unpack('<I', payload[0:4])[0]
         assert count == 3
 
     def test_param_entry_structure(self):
@@ -247,7 +247,7 @@ class TestParseParameterResponse:
 
     def test_single_param(self, make_parameter_response):
         param = TLX_PARAMETERS["grid_power_total"]
-        raw = struct.pack('<I', 2903)
+        raw = struct.pack('>I', 2903)
         response = make_parameter_response([(param, raw)])
         result = parse_parameter_response(response, [param])
         assert result["grid_power_total"] == 2903.0
@@ -255,8 +255,9 @@ class TestParseParameterResponse:
     def test_multi_params(self, make_parameter_response):
         p1 = TLX_PARAMETERS["grid_power_total"]
         p2 = TLX_PARAMETERS["operation_mode"]
-        raw1 = struct.pack('<I', 5000)
-        raw2 = struct.pack('<H', 4) + b'\x00\x00'
+        raw1 = struct.pack('>I', 5000)
+        # operation_mode: UNSIGNED16, rechts-aligniert im 4-Byte-Feld
+        raw2 = b'\x00\x00' + struct.pack('>H', 4)
         response = make_parameter_response([(p1, raw1), (p2, raw2)])
         result = parse_parameter_response(response, [p1, p2])
         assert result["grid_power_total"] == 5000.0
@@ -264,14 +265,15 @@ class TestParseParameterResponse:
 
     def test_scaling(self, make_parameter_response):
         param = TLX_PARAMETERS["pv_voltage_1"]  # scale=0.1
-        raw = struct.pack('<H', 3520) + b'\x00\x00'
+        # UNSIGNED16, rechts-aligniert: 2 Null-Bytes + 2 Wert-Bytes
+        raw = b'\x00\x00' + struct.pack('>H', 3520)
         response = make_parameter_response([(param, raw)])
         result = parse_parameter_response(response, [param])
         assert result["pv_voltage_1"] == 352.0
 
     def test_error_bit_skips_param(self, make_parameter_response):
         param = TLX_PARAMETERS["grid_power_total"]
-        raw = struct.pack('<I', 999)
+        raw = struct.pack('>I', 999)
         response = make_parameter_response([(param, raw)], error_indices={0})
         result = parse_parameter_response(response, [param])
         assert "grid_power_total" not in result
@@ -307,61 +309,65 @@ class TestParseParameterResponse:
 
 class TestParseValue:
     def test_boolean_true(self):
-        raw = struct.pack('<I', 1)
+        raw = struct.pack('>I', 1)
         assert _parse_value(raw, DataType.BOOLEAN, DataType.BOOLEAN) == 1.0
 
     def test_boolean_false(self):
-        raw = struct.pack('<I', 0)
+        raw = struct.pack('>I', 0)
         assert _parse_value(raw, DataType.BOOLEAN, DataType.BOOLEAN) == 0.0
 
     def test_signed8(self):
-        raw = struct.pack('<b', -42) + b'\x00\x00\x00'
+        # Rechts-aligniert: Wert im letzten Byte
+        raw = b'\x00\x00\x00' + struct.pack('>b', -42)
         assert _parse_value(raw, DataType.SIGNED8, DataType.SIGNED8) == -42.0
 
     def test_signed16(self):
-        raw = struct.pack('<h', -1000) + b'\x00\x00'
+        # Rechts-aligniert: Wert in den letzten 2 Bytes
+        raw = b'\x00\x00' + struct.pack('>h', -1000)
         assert _parse_value(raw, DataType.SIGNED16, DataType.SIGNED16) == -1000.0
 
     def test_signed32(self):
-        raw = struct.pack('<i', -100000)
+        raw = struct.pack('>i', -100000)
         assert _parse_value(raw, DataType.SIGNED32, DataType.SIGNED32) == -100000.0
 
     def test_unsigned8(self):
-        raw = bytes([200, 0, 0, 0])
+        # Rechts-aligniert: Wert im letzten Byte
+        raw = bytes([0, 0, 0, 200])
         assert _parse_value(raw, DataType.UNSIGNED8, DataType.UNSIGNED8) == 200.0
 
     def test_unsigned16(self):
-        raw = struct.pack('<H', 50000) + b'\x00\x00'
+        # Rechts-aligniert: Wert in den letzten 2 Bytes
+        raw = b'\x00\x00' + struct.pack('>H', 50000)
         assert _parse_value(raw, DataType.UNSIGNED16, DataType.UNSIGNED16) == 50000.0
 
     def test_unsigned32(self):
-        raw = struct.pack('<I', 3000000)
+        raw = struct.pack('>I', 3000000)
         assert _parse_value(raw, DataType.UNSIGNED32, DataType.UNSIGNED32) == 3000000.0
 
     def test_float(self):
-        raw = struct.pack('<f', 3.14)
+        raw = struct.pack('>f', 3.14)
         result = _parse_value(raw, DataType.FLOAT, DataType.FLOAT)
         assert abs(result - 3.14) < 0.001
 
     def test_packed_bytes(self):
-        raw = struct.pack('<I', 42)
+        raw = struct.pack('>I', 42)
         assert _parse_value(raw, DataType.PACKED_BYTES, DataType.PACKED_BYTES) == 42.0
 
     def test_packed_words(self):
-        raw = struct.pack('<I', 42)
+        raw = struct.pack('>I', 42)
         assert _parse_value(raw, DataType.PACKED_WORDS, DataType.PACKED_WORDS) == 42.0
 
     def test_wrong_length(self):
         assert _parse_value(b'\x00\x00', 0, DataType.UNSIGNED32) is None
 
     def test_response_type_zero_uses_expected(self):
-        raw = struct.pack('<I', 100)
+        raw = struct.pack('>I', 100)
         # response_type=0, expected=UNSIGNED32
         assert _parse_value(raw, 0, DataType.UNSIGNED32) == 100.0
 
     def test_unknown_type_fallback(self):
-        raw = struct.pack('<I', 77)
-        # Use FIX_POINT (0xC) which falls through to default unsigned32
+        raw = struct.pack('>I', 77)
+        # FIX_POINT (0xC) fällt durch auf default unsigned32 BE
         assert _parse_value(raw, DataType.FIX_POINT, DataType.FIX_POINT) == 77.0
 
 
@@ -407,7 +413,7 @@ class TestDanfossEtherLynx:
 
         ping_resp = make_ping_response("SER123")
         param = TLX_PARAMETERS["grid_power_total"]
-        raw = struct.pack('<I', 1500)
+        raw = struct.pack('>I', 1500)
         param_resp = make_parameter_response([(param, raw)])
 
         mock_sock.recvfrom.side_effect = [
@@ -433,13 +439,13 @@ class TestDanfossEtherLynx:
 
         # Build responses for 2 batches (3 + 2 with max_per_request=3)
         batch1_resp = make_parameter_response([
-            (params[0], struct.pack('<I', 100)),
-            (params[1], struct.pack('<I', 200)),
-            (params[2], struct.pack('<I', 300)),
+            (params[0], struct.pack('>I', 100)),
+            (params[1], struct.pack('>I', 200)),
+            (params[2], struct.pack('>I', 300)),
         ])
         batch2_resp = make_parameter_response([
-            (params[3], struct.pack('<I', 400)),
-            (params[4], struct.pack('<I', 500)),
+            (params[3], struct.pack('>I', 400)),
+            (params[4], struct.pack('>I', 500)),
         ])
 
         mock_sock.recvfrom.side_effect = [

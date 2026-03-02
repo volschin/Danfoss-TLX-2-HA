@@ -47,6 +47,15 @@ class DanfossConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     serial = discovered
                 elif not serial:
                     errors["base"] = "cannot_connect"
+            except RuntimeError as err:
+                if str(err) == "parameter_read_failed":
+                    _LOGGER.warning(
+                        "Inverter %s erreichbar, aber Parameter-Lesen fehlgeschlagen", ip
+                    )
+                    errors["base"] = "cannot_read_parameters"
+                else:
+                    _LOGGER.exception("Verbindungsfehler zu %s", ip)
+                    errors["base"] = "cannot_connect"
             except Exception:
                 _LOGGER.exception("Verbindungsfehler zu %s", ip)
                 errors["base"] = "cannot_connect"
@@ -84,12 +93,28 @@ class DanfossConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def _try_connect(ip: str, serial: str) -> Optional[str]:
-        """Versucht den Inverter zu erreichen und gibt die Seriennummer zurück."""
+        """Versucht den Inverter zu erreichen und gibt die Seriennummer zurück.
+
+        Prüft nach Discovery zusätzlich, ob Parameter gelesen werden können.
+        Wirft RuntimeError("parameter_read_failed") wenn Discovery klappt
+        aber Parameter-Lesen fehlschlägt.
+        """
         with DanfossEtherLynx(ip) as client:
             if serial:
                 client.inverter_serial = serial
-                return serial
-            return client.discover()
+            else:
+                serial = client.discover()
+                if not serial:
+                    return None
+
+            # Verbindungstest: Basis-Parameter lesen
+            test_data = client.read_parameters(
+                ["grid_power_total", "operation_mode", "nominal_power"]
+            )
+            if not test_data:
+                raise RuntimeError("parameter_read_failed")
+
+            return serial
 
     @staticmethod
     @callback

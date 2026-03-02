@@ -9,7 +9,7 @@ This document describes the codebase structure, conventions, and development wor
 **Danfoss-TLX-2-HA** is a Python-based Home Assistant integration for Danfoss TLX Pro solar inverters. It communicates with the inverter via the proprietary **EtherLynx UDP protocol** (port 48004) and exposes inverter data as native HA sensor entities via a HACS-compatible custom component.
 
 **License**: MIT
-**Language**: Python 3.9+
+**Language**: Python 3.11+
 **Documentation language**: German (comments, README, docstrings)
 **HACS**: Yes — install via Home Assistant Community Store
 
@@ -20,18 +20,38 @@ This document describes the codebase structure, conventions, and development wor
 ```
 Danfoss-TLX-2-HA/
 ├── hacs.json                        # HACS metadata (name, render_readme)
+├── pyproject.toml                   # pytest/ruff configuration
 ├── custom_components/
 │   └── danfoss_tlx/                 # HA custom component (HACS install target)
 │       ├── __init__.py              # Integration setup / entry point
-│       ├── manifest.json            # HA integration metadata
+│       ├── manifest.json            # HA integration metadata (keys: domain, name, then alphabetical)
 │       ├── const.py                 # Shared constants (DOMAIN, CONF_* keys)
 │       ├── config_flow.py           # UI config flow + options flow
 │       ├── coordinator.py           # DataUpdateCoordinator (polls inverter)
 │       ├── sensor.py                # SensorEntity subclasses
 │       ├── strings.json             # German UI strings
 │       ├── etherlynx.py             # EtherLynx protocol library (copied from root)
+│       ├── brand/
+│       │   ├── icon.png             # HACS brand icon (256×256)
+│       │   └── logo.png             # HACS brand logo (256×256)
 │       └── translations/
 │           └── en.json              # English UI translations
+├── tests/                           # pytest test suite (~98 tests, 88% coverage)
+│   ├── __init__.py
+│   ├── conftest.py                  # Shared fixtures (mock_hass, mock_config_entry, etc.)
+│   ├── test_etherlynx.py            # Protocol library tests (~53 tests)
+│   ├── test_coordinator.py          # Coordinator tests (~7 tests)
+│   ├── test_sensor.py               # Sensor entity tests (~13 tests)
+│   ├── test_config_flow.py          # Config flow tests (~7 tests)
+│   ├── test_init.py                 # Integration setup tests (~3 tests)
+│   └── test_e2e_inverter.py         # E2E tests against real inverter (requires INVERTER_IP env var)
+├── .github/
+│   ├── release-drafter.yml          # Release notes template + version resolver
+│   └── workflows/
+│       ├── test.yml                 # Test & Lint (Python 3.11–3.13, ruff, pytest)
+│       ├── hacs.yml                 # HACS Validation
+│       ├── hassfest.yml             # Hassfest Validation
+│       └── release.yml              # Release Drafter (auto-drafts releases from PRs)
 ├── danfoss_etherlynx.py             # Standalone protocol library (also used as etherlynx.py)
 ├── danfoss_ha_bridge.py             # Legacy MQTT bridge daemon (kept for reference)
 ├── danfoss_config.yaml              # Legacy MQTT bridge configuration template
@@ -57,7 +77,7 @@ Danfoss-TLX-2-HA/
 Integration entry point. Calls `async_setup_entry` and `async_unload_entry`. Registers the `sensor` platform and sets up a listener to reload when options change.
 
 #### `manifest.json`
-HA integration manifest. Required fields: `domain`, `name`, `version`, `iot_class`, `config_flow`, `codeowners`, `documentation`, `issue_tracker`. No external `requirements` — the protocol library is stdlib-only.
+HA integration manifest. Required fields: `domain`, `name`, `version`, `iot_class`, `config_flow`, `codeowners`, `documentation`, `issue_tracker`. No external `requirements` — the protocol library is stdlib-only. **Important**: keys must be ordered as `domain`, `name`, then remaining keys alphabetically (enforced by hassfest).
 
 #### `const.py`
 All shared constants: `DOMAIN = "danfoss_tlx"`, `CONF_*` config keys, default values.
@@ -186,8 +206,24 @@ Use `enum.Enum` or `enum.IntEnum` for fixed value sets. See `MessageID`, `Flag`,
 ### Protocol Accuracy
 - All byte layouts must match the official Danfoss EtherLynx spec (see the included PDF)
 - Include chapter/section citations in comments when referencing the spec
-- Little-endian byte order for all multi-byte fields (`struct.pack("<...")`)
 - Use exact Danfoss parameter IDs and module IDs from the spec
+- See "Protocol Byte Order" below for correct endianness per field
+
+### Protocol Byte Order
+
+The EtherLynx protocol uses **mixed endianness** — not uniformly little-endian:
+
+| Field | Byte Order | Notes |
+|-------|-----------|-------|
+| Header `data_offset` | Raw byte (0x0D) | Not bit-shifted, single byte |
+| Header `data_length`, `sequence`, `ack` | Big-Endian | `struct.pack(">H", ...)` |
+| Payload `num_params` (request) | Little-Endian | `struct.pack("<H", ...)` |
+| Response `num_params` | First byte of 4-byte header | Single byte, not a 16-bit field |
+| Parameter values | Big-Endian, right-aligned | In 4-byte field, `struct.unpack(">I", ...)` then apply data type |
+
+### Known Sentinel Values
+
+- **Temperature 127°C** — No physical sensor connected; should be treated as "unavailable"
 
 ---
 
@@ -281,13 +317,62 @@ When adding new parameters, follow this pattern exactly and include the Danfoss 
 
 ---
 
+## Testing
+
+The project has a pytest-based test suite with ~98 tests and 88% code coverage.
+
+### Running tests
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install pytest pytest-asyncio pytest-cov homeassistant voluptuous
+pytest -v
+pytest --cov=custom_components.danfoss_tlx --cov-report=term-missing
+```
+
+### Test structure
+- **`tests/conftest.py`** — Shared fixtures: `mock_hass`, `mock_config_entry`, `sample_inverter_data`, `make_ping_response`, `make_parameter_response`
+- **`tests/test_etherlynx.py`** — Protocol library: packet building/parsing, socket mocking, registry validation
+- **`tests/test_coordinator.py`** — DataUpdateCoordinator: discovery, serial handling, error recovery
+- **`tests/test_sensor.py`** — Sensor entities: value mapping, PV string filtering, device info
+- **`tests/test_config_flow.py`** — Config/options flows: form rendering, connection testing
+- **`tests/test_init.py`** — Integration setup/unload, platform forwarding
+- **`tests/test_e2e_inverter.py`** — End-to-end tests against a real inverter; skipped unless `INVERTER_IP` env var is set. Run with: `INVERTER_IP=x.x.x.x pytest tests/test_e2e_inverter.py -v -s`
+
+### Writing tests
+- Mock `socket.socket` for protocol tests — never open real UDP sockets
+- Patch `DataUpdateCoordinator.__init__` with `return_value=None` in coordinator tests (avoids HA frame context requirement)
+- Use fixtures from `conftest.py` for consistent test data
+- The CI enforces `--cov-fail-under=85`
+
+---
+
+## CI/CD
+
+Four GitHub Actions workflows run on pushes to `main` and on pull requests:
+
+| Workflow | File | Purpose |
+|---|---|---|
+| **Test & Lint** | `.github/workflows/test.yml` | Runs ruff linter, verifies etherlynx copies are in sync, runs pytest (Python 3.11–3.13) |
+| **HACS Validation** | `.github/workflows/hacs.yml` | Validates HACS integration requirements (brand assets, manifest, etc.) |
+| **Hassfest** | `.github/workflows/hassfest.yml` | Validates HA integration manifest (key ordering, required fields) |
+| **Release Drafter** | `.github/workflows/release.yml` | Auto-drafts release notes from merged PRs (push to main only) |
+
+### Release Drafter labels
+PR labels control version bumping and changelog categories:
+- `feature` / `enhancement` → "New Features" section, minor version bump
+- `fix` / `bug` → "Bug Fixes" section, patch version bump
+- `chore` / `ci` / `refactor` → "Maintenance" section
+- `major` → major version bump
+
+---
+
 ## Development Notes
 
-- No formal test suite exists. Manual testing against a live inverter (or captured UDP packets) is the current approach.
-- No CI/CD pipeline is configured.
 - The project is intentionally kept dependency-light — avoid adding third-party packages unless essential.
 - The README is the primary user documentation and is written in German; keep it in sync with any behavioral changes.
 - The included PDF (`ComLynx and EtherLynx User Guide.pdf`) is the authoritative reference for all protocol details. Consult it before modifying packet structure.
+- Both copies of etherlynx.py must stay in sync — CI verifies this with a diff check.
+- Run `ruff check` before committing; CI enforces clean linting.
 
 ---
 
@@ -296,4 +381,4 @@ When adding new parameters, follow this pattern exactly and include the Danfoss 
 - Primary remote branch: `origin/main`
 - Feature/AI branches follow the pattern: `claude/<description>-<id>`
 - Commit messages should be concise and in English (the git history uses English)
-- There are no protected branch rules or required CI checks currently
+- CI checks (test, lint, HACS, hassfest) run on all pushes and PRs to main

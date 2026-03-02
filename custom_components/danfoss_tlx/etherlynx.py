@@ -528,10 +528,9 @@ def _build_header(
     # Destination (24 bytes, nullterminiert + zero-padded)
     header.extend(_pad_serial(dest_serial, 24))
 
-    # Byte 36-39: Data offset (5 bits) | unused (3 bits) | flags (8 bits) |
-    #             transaction no (8 bits) | message ID (8 bits)
+    # Byte 36-39: Data offset | flags | transaction no | message ID
     # Data offset ist in 32-bit Wörtern, Minimum = 13 (0x0D)
-    byte36 = (ETHERLYNX_DATA_OFFSET & 0x1F) << 3  # data_offset in oberen 5 bits
+    byte36 = ETHERLYNX_DATA_OFFSET & 0xFF
     byte37 = flags & 0xFF
     byte38 = transaction_no & 0xFF
     byte39 = message_id & 0xFF
@@ -583,9 +582,9 @@ def build_get_parameters_packet(
     # Data payload aufbauen
     data = bytearray()
 
-    # Byte 0-3: Anzahl der Parameter-Requests (32-bit)
+    # Byte 0-3: Anzahl der Parameter-Requests (32-bit, Little-Endian)
     num_params = len(parameters)
-    data.extend(struct.pack('>I', num_params))
+    data.extend(struct.pack('<I', num_params))
 
     # Pro Parameter: 8 Bytes
     for param in parameters:
@@ -675,8 +674,8 @@ def parse_parameter_response(
         logger.error("Payload zu kurz für Parameteranzahl")
         return results
 
-    # Anzahl Parameter
-    num_params = struct.unpack('>I', payload[0:4])[0]
+    # Anzahl Parameter (erstes Byte des 4-Byte-Headers)
+    num_params = payload[0]
 
     if num_params != len(requested_params):
         logger.warning(
@@ -739,7 +738,8 @@ def _parse_value(
 ) -> Optional[float]:
     """Parst einen 4-Byte Parameterwert basierend auf dem Datentyp.
 
-    Laut Doku: "The byte order is LSB first and MSB last" (Intel/Little-Endian)
+    Werte sind im 4-Byte-Feld rechts-aligniert (Big-Endian / Network Byte Order).
+    Kleinere Typen (8/16 Bit) stehen in den hinteren Bytes des Feldes.
     """
     if len(raw) != 4:
         return None
@@ -749,26 +749,26 @@ def _parse_value(
 
     try:
         if dtype == DataType.BOOLEAN:
-            return float(struct.unpack('<I', raw)[0] != 0)
+            return float(struct.unpack('>I', raw)[0] != 0)
         elif dtype == DataType.SIGNED8:
-            return float(struct.unpack('<b', raw[0:1])[0])
+            return float(struct.unpack('>b', raw[3:4])[0])
         elif dtype == DataType.SIGNED16:
-            return float(struct.unpack('<h', raw[0:2])[0])
+            return float(struct.unpack('>h', raw[2:4])[0])
         elif dtype == DataType.SIGNED32:
-            return float(struct.unpack('<i', raw)[0])
+            return float(struct.unpack('>i', raw)[0])
         elif dtype == DataType.UNSIGNED8:
-            return float(raw[0])
+            return float(raw[3])
         elif dtype == DataType.UNSIGNED16:
-            return float(struct.unpack('<H', raw[0:2])[0])
+            return float(struct.unpack('>H', raw[2:4])[0])
         elif dtype == DataType.UNSIGNED32:
-            return float(struct.unpack('<I', raw)[0])
+            return float(struct.unpack('>I', raw)[0])
         elif dtype == DataType.FLOAT:
-            return float(struct.unpack('<f', raw)[0])
+            return float(struct.unpack('>f', raw)[0])
         elif dtype in (DataType.PACKED_BYTES, DataType.PACKED_WORDS):
-            return float(struct.unpack('<I', raw)[0])
+            return float(struct.unpack('>I', raw)[0])
         else:
             # Fallback: unsigned 32
-            return float(struct.unpack('<I', raw)[0])
+            return float(struct.unpack('>I', raw)[0])
     except struct.error as e:
         logger.error(f"Struct-Fehler beim Parsen: {e}")
         return None

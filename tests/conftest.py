@@ -142,8 +142,8 @@ def make_parameter_response():
         header[39] = MessageID.GET_SET_PARAMETER
 
         payload = bytearray()
-        # Parameteranzahl
-        payload.extend(struct.pack('>I', len(params_with_values)))
+        # Parameteranzahl im ersten Byte, gefolgt von 3 Füllbytes
+        payload.extend(struct.pack('BBBB', len(params_with_values), 0x00, 0x00, 0x00))
 
         for i, (param_def, raw_bytes) in enumerate(params_with_values):
             if i in error_indices:

@@ -73,11 +73,24 @@ async def async_setup_entry(
 def _device_info(coordinator: DanfossCoordinator, entry: DanfossTLXConfigEntry) -> DeviceInfo:
     """Gemeinsame Geräteinformationen für das HA-Geräteregister."""
     serial = coordinator.inverter_serial or entry.entry_id
+    sw_version = None
+    hw_version = None
+    if coordinator.data:
+        sw_value = coordinator.data.get("sw_version")
+        hw_value = coordinator.data.get("hardware_type")
+        if sw_value is not None:
+            sw_version = str(sw_value)
+        if hw_value is not None:
+            hw_version = str(int(hw_value))
+
     return DeviceInfo(
         identifiers={(DOMAIN, entry.entry_id)},
         name=f"Danfoss TLX Pro ({serial})",
         manufacturer="Danfoss Solar Inverters",
         model="TLX Pro",
+        serial_number=coordinator.inverter_serial,
+        sw_version=sw_version,
+        hw_version=hw_version,
     )
 
 

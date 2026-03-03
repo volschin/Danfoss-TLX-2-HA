@@ -264,7 +264,13 @@ class TestDeviceInfo:
         assert (DOMAIN, mock_config_entry.entry_id) in info["identifiers"]
         assert "TLX123456" in info["name"]
         assert info["manufacturer"] == "Danfoss Solar Inverters"
+        assert info["serial_number"] == "TLX123456"
+        assert info["sw_version"] == "3.45"
+        assert info["hw_version"] == "7"
 
     def test_without_serial(self, mock_coordinator_no_data, mock_config_entry):
         info = _device_info(mock_coordinator_no_data, mock_config_entry)
         assert mock_config_entry.entry_id in info["name"]
+        assert info["serial_number"] is None
+        assert info["sw_version"] is None
+        assert info["hw_version"] is None

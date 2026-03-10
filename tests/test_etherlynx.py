@@ -547,6 +547,113 @@ class TestDanfossEtherLynx:
         assert client.inverter_serial == "MANUAL_SER"
 
 
+class TestDanfossEtherLynxEdgeCases:
+    """Tests für Grenzfälle im EtherLynx-Protokoll."""
+
+    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
+    def test_send_receive_oserror(self, mock_socket_cls):
+        """_send_receive: OSError wird abgefangen und None zurückgegeben."""
+        import socket as real_socket
+        mock_sock = MagicMock()
+        mock_socket_cls.return_value = mock_sock
+        mock_sock.sendto.side_effect = OSError("Network unreachable")
+
+        client = DanfossEtherLynx("192.168.1.100")
+        client.inverter_serial = "SER123"
+
+        packet = build_ping_packet()
+        result = client._send_receive(packet)
+
+        assert result is None
+        client.close()
+
+    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
+    def test_read_parameters_discover_fails(self, mock_socket_cls):
+        """read_parameters: Discovery schlägt fehl → leeres Dict."""
+        import socket as real_socket
+        mock_sock = MagicMock()
+        mock_socket_cls.return_value = mock_sock
+        # Discovery timeout - no response
+        mock_sock.recvfrom.side_effect = real_socket.timeout("timeout")
+
+        client = DanfossEtherLynx("192.168.1.100")
+        # No serial set - will trigger discovery
+        result = client.read_parameters(["grid_power_total"])
+
+        assert result == {}
+        client.close()
+
+    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
+    def test_read_parameters_unknown_key(self, mock_socket_cls, make_ping_response, make_parameter_response):
+        """read_parameters: Unbekannter Schlüssel wird übersprungen."""
+        mock_sock = MagicMock()
+        mock_socket_cls.return_value = mock_sock
+
+        ping_resp = make_ping_response("SER123")
+        param = TLX_PARAMETERS["grid_power_total"]
+        raw = struct.pack('>I', 1500)
+        param_resp = make_parameter_response([(param, raw)])
+
+        mock_sock.recvfrom.side_effect = [
+            (ping_resp, ("192.168.1.100", ETHERLYNX_PORT)),
+            (param_resp, ("192.168.1.100", ETHERLYNX_PORT)),
+        ]
+
+        client = DanfossEtherLynx("192.168.1.100")
+        # Mix valid and unknown keys
+        result = client.read_parameters(["grid_power_total", "unknown_param_xyz"])
+
+        # Only valid key should be in result
+        assert "grid_power_total" in result
+        assert "unknown_param_xyz" not in result
+        client.close()
+
+    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
+    def test_read_parameters_batch_no_response(self, mock_socket_cls, make_ping_response, make_parameter_response):
+        """read_parameters: Batch ohne Antwort wird übersprungen."""
+        import socket as real_socket
+        mock_sock = MagicMock()
+        mock_socket_cls.return_value = mock_sock
+
+        ping_resp = make_ping_response("SER123")
+        param = TLX_PARAMETERS["grid_power_total"]
+        raw = struct.pack('>I', 1500)
+        param_resp = make_parameter_response([(param, raw)])
+
+        # First call: ping response for discovery
+        # Second call (first batch): timeout → None response
+        # Third call (second batch): valid response
+        mock_sock.recvfrom.side_effect = [
+            (ping_resp, ("192.168.1.100", ETHERLYNX_PORT)),
+            real_socket.timeout("timeout"),   # first batch fails
+            (param_resp, ("192.168.1.100", ETHERLYNX_PORT)),  # second batch ok
+        ]
+
+        client = DanfossEtherLynx("192.168.1.100")
+        # Use max_per_request=1 so each param gets its own batch
+        result = client.read_parameters(["operation_mode", "grid_power_total"], max_per_request=1)
+
+        # operation_mode batch failed (timeout), grid_power_total batch succeeded
+        assert "grid_power_total" in result
+        client.close()
+
+    def test_parse_parameter_response_param_count_mismatch(self, make_parameter_response):
+        """parse_parameter_response: Anzahl-Mismatch wird toleriert."""
+        param1 = TLX_PARAMETERS["grid_power_total"]
+        param2 = TLX_PARAMETERS["operation_mode"]
+        raw1 = struct.pack('>I', 2000)
+        raw2 = b'\x00\x00' + struct.pack('>H', 4)
+
+        # Response contains 2 params but we say we only requested 1
+        response = make_parameter_response([(param1, raw1), (param2, raw2)])
+
+        # Request only param1, but response has 2 entries
+        result = parse_parameter_response(response, [param1])
+
+        # Should still parse the first param even with mismatch
+        assert "grid_power_total" in result
+
+
 # ============================================================================
 # Registry Validation Tests
 # ============================================================================

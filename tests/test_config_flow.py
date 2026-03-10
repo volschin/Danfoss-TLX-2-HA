@@ -185,6 +185,124 @@ class TestDanfossReconfigureFlow:
         assert result["errors"]["base"] == "cannot_connect"
 
 
+class TestDanfossConfigFlowErrors:
+    @pytest.mark.asyncio
+    async def test_user_generic_runtime_error(self, mock_hass):
+        """User step: RuntimeError (nicht parameter_read_failed) zeigt cannot_connect."""
+        mock_hass.async_add_executor_job = AsyncMock(
+            side_effect=RuntimeError("some other error")
+        )
+
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+
+        result = await flow.async_step_user({
+            CONF_INVERTER_IP: "192.168.1.100",
+            CONF_INVERTER_SERIAL: "",
+            CONF_PV_STRINGS: 2,
+            CONF_SCAN_INTERVAL: 15,
+        })
+
+        assert result["type"] == "form"
+        assert result["errors"]["base"] == "cannot_connect"
+
+    @pytest.mark.asyncio
+    async def test_user_generic_exception(self, mock_hass):
+        """User step: Unerwarteter Fehler zeigt cannot_connect."""
+        mock_hass.async_add_executor_job = AsyncMock(
+            side_effect=Exception("unexpected error")
+        )
+
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+
+        result = await flow.async_step_user({
+            CONF_INVERTER_IP: "192.168.1.100",
+            CONF_INVERTER_SERIAL: "",
+            CONF_PV_STRINGS: 2,
+            CONF_SCAN_INTERVAL: 15,
+        })
+
+        assert result["type"] == "form"
+        assert result["errors"]["base"] == "cannot_connect"
+
+    @pytest.mark.asyncio
+    async def test_reconfigure_generic_runtime_error(self, mock_hass, mock_config_entry):
+        """Reconfigure: RuntimeError (nicht parameter_read_failed) zeigt cannot_connect."""
+        mock_hass.async_add_executor_job = AsyncMock(
+            side_effect=RuntimeError("some other error")
+        )
+
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+        flow._get_reconfigure_entry = MagicMock(return_value=mock_config_entry)
+
+        result = await flow.async_step_reconfigure({
+            CONF_INVERTER_IP: "192.168.1.200",
+            CONF_INVERTER_SERIAL: "",
+        })
+
+        assert result["type"] == "form"
+        assert result["errors"]["base"] == "cannot_connect"
+
+    @pytest.mark.asyncio
+    async def test_reconfigure_generic_exception(self, mock_hass, mock_config_entry):
+        """Reconfigure: Unerwarteter Fehler zeigt cannot_connect."""
+        mock_hass.async_add_executor_job = AsyncMock(
+            side_effect=Exception("unexpected error")
+        )
+
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+        flow._get_reconfigure_entry = MagicMock(return_value=mock_config_entry)
+
+        result = await flow.async_step_reconfigure({
+            CONF_INVERTER_IP: "192.168.1.200",
+            CONF_INVERTER_SERIAL: "",
+        })
+
+        assert result["type"] == "form"
+        assert result["errors"]["base"] == "cannot_connect"
+
+    @pytest.mark.asyncio
+    async def test_reconfigure_parameter_read_failed(self, mock_hass, mock_config_entry):
+        """Reconfigure: RuntimeError parameter_read_failed zeigt cannot_read_parameters."""
+        mock_hass.async_add_executor_job = AsyncMock(
+            side_effect=RuntimeError("parameter_read_failed")
+        )
+
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+        flow._get_reconfigure_entry = MagicMock(return_value=mock_config_entry)
+
+        result = await flow.async_step_reconfigure({
+            CONF_INVERTER_IP: "192.168.1.200",
+            CONF_INVERTER_SERIAL: "",
+        })
+
+        assert result["type"] == "form"
+        assert result["errors"]["base"] == "cannot_read_parameters"
+
+    def test_try_connect_without_serial_discover_returns_none(self):
+        """_try_connect ohne Serial: discover() gibt None zurück → return None."""
+        with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.discover.return_value = None
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+            result = DanfossConfigFlow._try_connect("192.168.1.100", "")
+
+            assert result is None
+            mock_client.discover.assert_called_once()
+            mock_client.read_parameters.assert_not_called()
+
+    def test_options_flow_factory(self, mock_config_entry):
+        """Options Flow Factory gibt DanfossOptionsFlow zurück."""
+        result = DanfossConfigFlow.async_get_options_flow(mock_config_entry)
+        assert isinstance(result, DanfossOptionsFlow)
+
+
 class TestDanfossOptionsFlow:
     @pytest.mark.asyncio
     async def test_shows_form_with_defaults(self, mock_config_entry):

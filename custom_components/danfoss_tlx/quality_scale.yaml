@@ -1,0 +1,80 @@
+# Quality Scale for Danfoss TLX Pro Integration
+# https://developers.home-assistant.io/docs/core/integration-quality-scale/
+
+rules:
+  # Bronze
+  action-setup:
+    status: exempt
+    comment: Integration bietet keine Service Actions.
+  appropriate-polling: done
+  brands: done
+  common-modules: done
+  config-flow: done
+  config-flow-test-coverage: done
+  dependency-transparency: done
+  docs-actions:
+    status: exempt
+    comment: Integration bietet keine Service Actions.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  entity-event-setup: done
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
+
+  # Silver
+  action-exceptions:
+    status: exempt
+    comment: Integration bietet keine Service Actions.
+  config-entry-unloading: done
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow:
+    status: exempt
+    comment: Keine Authentifizierung nötig (lokales UDP-Protokoll).
+  test-coverage: done
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery:
+    status: exempt
+    comment: >
+      Proprietäres EtherLynx-UDP-Protokoll unterstützt kein SSDP, mDNS, DHCP oder
+      andere Standard-Discovery-Mechanismen. Discovery erfolgt manuell per IP.
+  discovery-update-info:
+    status: exempt
+    comment: Kein Network-Discovery verfügbar.
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices:
+    status: exempt
+    comment: Ein Gerät pro Config Entry (Einzelinverter).
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default: done
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow: done
+  repair-issues:
+    status: exempt
+    comment: >
+      Keine Auth, Single-Device. Verbindungsprobleme werden über Verfügbarkeit und
+      Logging kommuniziert. Reconfigure-Flow deckt IP-Änderungen ab.
+  stale-devices:
+    status: exempt
+    comment: Ein Gerät pro Config Entry, wird bei Unload entfernt.

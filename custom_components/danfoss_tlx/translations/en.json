@@ -39,5 +39,72 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "inverter_unreachable": {
+      "message": "Inverter at {ip} is unreachable."
+    },
+    "no_data_received": {
+      "message": "No data received from inverter."
+    },
+    "update_failed": {
+      "message": "Error fetching inverter data: {error}"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "total_energy": { "name": "Total Energy Production" },
+      "energy_today": { "name": "Energy Today" },
+      "pv_voltage_1": { "name": "PV Voltage String 1" },
+      "pv_voltage_2": { "name": "PV Voltage String 2" },
+      "pv_voltage_3": { "name": "PV Voltage String 3" },
+      "pv_current_1": { "name": "PV Current String 1" },
+      "pv_current_2": { "name": "PV Current String 2" },
+      "pv_current_3": { "name": "PV Current String 3" },
+      "pv_power_1": { "name": "PV Power String 1" },
+      "pv_power_2": { "name": "PV Power String 2" },
+      "pv_power_3": { "name": "PV Power String 3" },
+      "pv_energy_1": { "name": "PV Energy String 1" },
+      "pv_energy_2": { "name": "PV Energy String 2" },
+      "pv_energy_3": { "name": "PV Energy String 3" },
+      "grid_voltage_l1": { "name": "Grid Voltage L1" },
+      "grid_voltage_l2": { "name": "Grid Voltage L2" },
+      "grid_voltage_l3": { "name": "Grid Voltage L3" },
+      "grid_voltage_l1_avg": { "name": "Grid Voltage L1 (10min avg)" },
+      "grid_voltage_l2_avg": { "name": "Grid Voltage L2 (10min avg)" },
+      "grid_voltage_l3_avg": { "name": "Grid Voltage L3 (10min avg)" },
+      "grid_current_l1": { "name": "Grid Current L1" },
+      "grid_current_l2": { "name": "Grid Current L2" },
+      "grid_current_l3": { "name": "Grid Current L3" },
+      "grid_power_l1": { "name": "Grid Power L1" },
+      "grid_power_l2": { "name": "Grid Power L2" },
+      "grid_power_l3": { "name": "Grid Power L3" },
+      "grid_power_total": { "name": "Grid Power Total" },
+      "grid_energy_today_l1": { "name": "Grid Energy Today L1" },
+      "grid_energy_today_l2": { "name": "Grid Energy Today L2" },
+      "grid_energy_today_l3": { "name": "Grid Energy Today L3" },
+      "grid_energy_today_total": { "name": "Grid Energy Today Total" },
+      "grid_dc_l1": { "name": "DC Content Current L1" },
+      "grid_dc_l2": { "name": "DC Content Current L2" },
+      "grid_dc_l3": { "name": "DC Content Current L3" },
+      "grid_frequency_l1": { "name": "Grid Frequency L1" },
+      "grid_frequency_l2": { "name": "Grid Frequency L2" },
+      "grid_frequency_l3": { "name": "Grid Frequency L3" },
+      "grid_frequency_avg": { "name": "Grid Frequency Average" },
+      "irradiance": { "name": "Irradiance" },
+      "ambient_temp": { "name": "Ambient Temperature" },
+      "pv_array_temp": { "name": "PV Array Temperature" },
+      "operation_mode": { "name": "Operation Mode (Raw)" },
+      "latest_event": { "name": "Latest Event (Raw)" },
+      "hardware_type": { "name": "Hardware Type" },
+      "nominal_power": { "name": "Nominal Power" },
+      "sw_version": { "name": "Software Version" },
+      "production_today_log": { "name": "Production Today (Log)" },
+      "production_this_week": { "name": "Production This Week" },
+      "production_this_month": { "name": "Production This Month" },
+      "production_this_year": { "name": "Production This Year" },
+      "operation_mode_text": { "name": "Operation Mode" },
+      "latest_event_text": { "name": "Latest Event" }
+    }
   }
 }

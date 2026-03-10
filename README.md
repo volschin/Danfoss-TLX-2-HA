@@ -1,6 +1,6 @@
 # Danfoss TLX Pro → Home Assistant
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration) [![GitHub Release](https://img.shields.io/github/v/release/volschin/Danfoss-TLX-2-HA?style=for-the-badge)](https://github.com/volschin/Danfoss-TLX-2-HA/releases) [![License](https://img.shields.io/github/license/volschin/Danfoss-TLX-2-HA?style=for-the-badge)](LICENSE)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration) [![GitHub Release](https://img.shields.io/github/v/release/volschin/Danfoss-TLX-2-HA?style=for-the-badge)](https://github.com/volschin/Danfoss-TLX-2-HA/releases) [![License](https://img.shields.io/github/license/volschin/Danfoss-TLX-2-HA?style=for-the-badge)](LICENSE) [![Quality Scale](https://img.shields.io/badge/Quality%20Scale-Gold-FFD700?style=for-the-badge)](https://www.home-assistant.io/docs/quality_scale/)
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/volschin/Danfoss-TLX-2-HA/test.yml?branch=main&style=for-the-badge&label=Tests)](https://github.com/volschin/Danfoss-TLX-2-HA/actions/workflows/test.yml) [![HACS Validation](https://img.shields.io/github/actions/workflow/status/volschin/Danfoss-TLX-2-HA/hacs.yml?branch=main&style=for-the-badge&label=HACS)](https://github.com/volschin/Danfoss-TLX-2-HA/actions/workflows/hacs.yml) [![Hassfest](https://img.shields.io/github/actions/workflow/status/volschin/Danfoss-TLX-2-HA/hassfest.yml?branch=main&style=for-the-badge&label=Hassfest)](https://github.com/volschin/Danfoss-TLX-2-HA/actions/workflows/hassfest.yml)
 
@@ -47,6 +47,16 @@ Direkte Anbindung des Danfoss TLX Pro Wechselrichters an Home Assistant über da
 
 Die Integration prüft beim Setup sowohl die Erreichbarkeit als auch das Lesen von Parametern.
 
+## 🔄 Daten-Aktualisierung
+
+Die Integration nutzt **Polling** über das EtherLynx-Protokoll (UDP). Der DataUpdateCoordinator fragt den Inverter in konfigurierbaren Intervallen ab:
+
+- **Standard-Intervall:** 15 Sekunden (einstellbar von 5 bis 3600 Sekunden)
+- **Protokoll:** UDP Port 48004 (EtherLynx)
+- **Batch-Abfrage:** Alle ~45 Parameter werden in wenigen UDP-Paketen gleichzeitig gelesen
+- **Offline-Erkennung:** Bei fehlgeschlagener Abfrage werden alle Sensoren als "nicht verfügbar" markiert. Ein Warnlog wird beim ersten Fehler geschrieben, beim Wiederherstellen ein Info-Log.
+- **Nachts:** Der Inverter schaltet sich automatisch ab. Die Integration erkennt dies und markiert Sensoren als nicht verfügbar. Morgens erfolgt automatisch die Wiederverbindung inkl. Discovery.
+
 ## 📊 Verfügbare Sensoren
 
 ### ⚡ Echtzeit (alle 15–30 Sekunden)
@@ -65,6 +75,106 @@ Die Integration prüft beim Setup sowohl die Erreichbarkeit als auch das Lesen v
 ### 🖥️ System (stündlich)
 
 - Hardware-Typ, Nennleistung, Software-Version, Seriennummer
+
+## 📱 Unterstützte Geräte
+
+### Kompatible Modelle
+
+| Modell | Nennleistung | PV-Strings | Getestet |
+|--------|-------------|------------|----------|
+| TLX 6k | 6.000 W | 2 | ✓ |
+| TLX 6.5k | 6.500 W | 2 | – |
+| TLX 7k | 7.000 W | 2 | – |
+| TLX 8k | 8.000 W | 2 | – |
+| TLX 10k | 10.000 W | 2 oder 3 | ✓ |
+| TLX 12.5k | 12.500 W | 3 | – |
+| TLX 15k | 15.000 W | 3 | ✓ |
+
+### Voraussetzungen
+
+- Inverter mit **Ethernet-Port** (Communication Board #8)
+- Netzwerkverbindung zwischen Home Assistant und Inverter (gleiches LAN/Subnetz)
+- Inverter muss eingeschaltet sein (Solarproduktion oder Standby mit Netzversorgung)
+
+### Nicht unterstützt
+
+- Danfoss TLX **ohne** Ethernet-Port (nur RS485)
+- Danfoss ULX, DLX, CLX Serien (anderes Protokoll)
+- Inverter hinter NAT/VPN ohne direkte UDP-Erreichbarkeit
+
+## 💡 Anwendungsbeispiele
+
+### Energy Dashboard
+
+Die Integration ist vollständig mit dem HA Energy Dashboard kompatibel:
+- **Solarproduktion:** `sensor.danfoss_tlx_pro_netzleistung_gesamt` als Echtzeit-Leistung
+- **Tagesertrag:** `sensor.danfoss_tlx_pro_produktion_heute_log` als Tagesenergiezähler
+
+### Beispiel-Automationen
+
+<details>
+<summary>Benachrichtigung bei Inverter-Fehler</summary>
+
+```yaml
+automation:
+  - alias: "Danfoss TLX Fehler-Alarm"
+    trigger:
+      - platform: state
+        entity_id: sensor.danfoss_tlx_pro_letztes_ereignis
+    condition:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: sensor.danfoss_tlx_pro_letztes_ereignis
+            state: "Kein Ereignis"
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "⚠️ Wechselrichter-Ereignis"
+          message: "{{ states('sensor.danfoss_tlx_pro_letztes_ereignis') }}"
+```
+
+</details>
+
+<details>
+<summary>Tagesertrag-Zusammenfassung abends</summary>
+
+```yaml
+automation:
+  - alias: "Danfoss TLX Tagesbericht"
+    trigger:
+      - platform: time
+        at: "21:00:00"
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "☀️ Solarertrag heute"
+          message: >
+            Produktion: {{ states('sensor.danfoss_tlx_pro_produktion_heute_log') }} kWh
+```
+
+</details>
+
+<details>
+<summary>Template-Sensor: Wirkungsgrad</summary>
+
+```yaml
+template:
+  - sensor:
+      - name: "PV Wirkungsgrad"
+        unit_of_measurement: "%"
+        state: >
+          {% set pv = states('sensor.danfoss_tlx_pro_pv_leistung_string_1') | float(0)
+                    + states('sensor.danfoss_tlx_pro_pv_leistung_string_2') | float(0) %}
+          {% set grid = states('sensor.danfoss_tlx_pro_netzleistung_gesamt') | float(0) %}
+          {% if pv > 0 %}
+            {{ (grid / pv * 100) | round(1) }}
+          {% else %}
+            0
+          {% endif %}
+```
+
+</details>
 
 ## 📋 Dashboard
 
@@ -160,6 +270,15 @@ sudo systemctl enable --now danfoss_etherlynx
 ```
 
 </details>
+
+## ⚠️ Bekannte Einschränkungen
+
+- **Nachts keine Daten:** Der TLX Pro schaltet sich bei fehlender Solarproduktion ab. Die Integration zeigt dann "nicht verfügbar" — das ist normales Verhalten.
+- **Temperatur-Sentinel:** Sensoren für Umgebungs- und Modultemperatur zeigen "nicht verfügbar" wenn kein externer Temperatursensor am Inverter angeschlossen ist (Rohwert ≥ 120°C).
+- **Keine Schreibzugriffe:** Die Integration liest nur Parameter. Konfigurationsänderungen am Inverter (z.B. Leistungsbegrenzung) sind nicht möglich.
+- **Einzelnes Subnetz:** Der Inverter muss im selben Netzwerksegment erreichbar sein. UDP-Broadcast funktioniert nicht über Router-Grenzen.
+- **Firmware-Varianten:** Verschiedene Firmware-Versionen können leicht abweichende Parameter unterstützen. Nicht alle 45+ Parameter sind bei allen Modellen verfügbar.
+- **Kein Auto-Discovery:** Der Inverter unterstützt kein SSDP, mDNS oder DHCP-basiertes Discovery. Die IP-Adresse muss manuell eingegeben werden.
 
 ## 🐛 Troubleshooting
 

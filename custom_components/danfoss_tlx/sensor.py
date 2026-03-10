@@ -109,7 +109,7 @@ class DanfossSensor(CoordinatorEntity[DanfossCoordinator], SensorEntity):
         super().__init__(coordinator)
         self._key = key
         self._entry = entry
-        self._attr_name = param.name
+        self._attr_translation_key = key
         self._attr_unique_id = f"danfoss_tlx_{entry.entry_id}_{key}"
         self._attr_native_unit_of_measurement = param.unit if param.unit else None
         if param.device_class:
@@ -164,9 +164,8 @@ class DanfossOperationModeSensor(CoordinatorEntity[DanfossCoordinator], SensorEn
     ) -> None:
         super().__init__(coordinator)
         self._entry = entry
-        self._attr_name = "Betriebsmodus"
+        self._attr_translation_key = "operation_mode_text"
         self._attr_unique_id = f"danfoss_tlx_{entry.entry_id}_operation_mode_text"
-        self._attr_icon = "mdi:solar-power"
 
     @property
     def native_value(self) -> str | None:
@@ -196,9 +195,8 @@ class DanfossEventSensor(CoordinatorEntity[DanfossCoordinator], SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._entry = entry
-        self._attr_name = "Letztes Ereignis"
+        self._attr_translation_key = "latest_event_text"
         self._attr_unique_id = f"danfoss_tlx_{entry.entry_id}_latest_event_text"
-        self._attr_icon = "mdi:alert-circle-outline"
 
     @property
     def native_value(self) -> str | None:

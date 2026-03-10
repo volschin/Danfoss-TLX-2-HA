@@ -3,6 +3,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from homeassistant.exceptions import HomeAssistantError
+
 from custom_components.danfoss_tlx.const import (
     CONF_INVERTER_SERIAL,
     CONF_SCAN_INTERVAL,
@@ -80,7 +82,7 @@ class TestDanfossCoordinator:
 
         coordinator = _make_coordinator(mock_hass, mock_config_entry)
 
-        with pytest.raises(RuntimeError, match="Keine Daten"):
+        with pytest.raises(HomeAssistantError):
             coordinator._fetch_data()
 
         mock_client.close.assert_called_once()
@@ -95,5 +97,62 @@ class TestDanfossCoordinator:
 
         coordinator = _make_coordinator(mock_hass, mock_config_entry)
 
-        with pytest.raises(RuntimeError, match="nicht erreichbar"):
+        with pytest.raises(HomeAssistantError):
             coordinator._fetch_data()
+
+    @pytest.mark.asyncio
+    async def test_warning_logged_on_first_failure(self, mock_hass, mock_config_entry):
+        """WARNING wird beim ersten Fehler geloggt (vorheriger Zustand: None)."""
+        from unittest.mock import AsyncMock
+        coordinator = _make_coordinator(mock_hass, mock_config_entry)
+        coordinator._last_update_success = None
+
+        coordinator.hass.async_add_executor_job = AsyncMock(
+            side_effect=Exception("Timeout")
+        )
+
+        with patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
+            with pytest.raises(Exception):
+                await coordinator._async_update_data()
+            mock_logger.warning.assert_called_once()
+            assert "192.168.1.100" in mock_logger.warning.call_args[0][1]
+
+        assert coordinator._last_update_success is False
+
+    @pytest.mark.asyncio
+    async def test_no_repeated_warning_on_consecutive_failures(self, mock_hass, mock_config_entry):
+        """Kein weiteres WARNING bei aufeinanderfolgenden Fehlern."""
+        from unittest.mock import AsyncMock
+        coordinator = _make_coordinator(mock_hass, mock_config_entry)
+        coordinator._last_update_success = False
+
+        coordinator.hass.async_add_executor_job = AsyncMock(
+            side_effect=Exception("Timeout")
+        )
+
+        with patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
+            with pytest.raises(Exception):
+                await coordinator._async_update_data()
+            mock_logger.warning.assert_not_called()
+
+        assert coordinator._last_update_success is False
+
+    @pytest.mark.asyncio
+    async def test_info_logged_on_recovery(self, mock_hass, mock_config_entry):
+        """INFO wird geloggt, wenn Inverter nach Fehler wieder erreichbar ist."""
+        from unittest.mock import AsyncMock
+        coordinator = _make_coordinator(mock_hass, mock_config_entry)
+        coordinator._last_update_success = False
+
+        sample_data = {"grid_power_total": 1500.0}
+        coordinator.hass.async_add_executor_job = AsyncMock(
+            return_value=sample_data
+        )
+
+        with patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
+            result = await coordinator._async_update_data()
+            mock_logger.info.assert_called_once()
+            assert "192.168.1.100" in mock_logger.info.call_args[0][1]
+
+        assert coordinator._last_update_success is True
+        assert result == sample_data

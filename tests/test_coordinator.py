@@ -1,5 +1,4 @@
 """Tests für den DanfossCoordinator."""
-import logging
 from unittest.mock import patch, MagicMock
 
 import pytest

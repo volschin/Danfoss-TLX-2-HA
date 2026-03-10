@@ -8,10 +8,6 @@ import pytest
 
 from custom_components.danfoss_tlx.diagnostics import async_get_config_entry_diagnostics
 from custom_components.danfoss_tlx.const import (
-    CONF_INVERTER_IP,
-    CONF_INVERTER_SERIAL,
-    CONF_PV_STRINGS,
-    CONF_SCAN_INTERVAL,
     DEFAULT_PV_STRINGS,
     DEFAULT_SCAN_INTERVAL,
 )

@@ -553,7 +553,6 @@ class TestDanfossEtherLynxEdgeCases:
     @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
     def test_send_receive_oserror(self, mock_socket_cls):
         """_send_receive: OSError wird abgefangen und None zurückgegeben."""
-        import socket as real_socket
         mock_sock = MagicMock()
         mock_socket_cls.return_value = mock_sock
         mock_sock.sendto.side_effect = OSError("Network unreachable")

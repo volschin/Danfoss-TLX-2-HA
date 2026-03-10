@@ -41,4 +41,4 @@ jobs:
         run: ruff check custom_components/ tests/
 
       - name: Run tests with coverage
-        run: pytest --cov=custom_components.danfoss_tlx --cov-report=term-missing --cov-fail-under=85 -v
+        run: pytest --cov=custom_components.danfoss_tlx --cov-report=term-missing --cov-fail-under=95 -v

@@ -12,6 +12,7 @@ This document describes the codebase structure, conventions, and development wor
 **Language**: Python 3.11+
 **Documentation language**: German (comments, README, docstrings)
 **HACS**: Yes — install via Home Assistant Community Store
+**Quality Scale**: Gold
 
 ---
 
@@ -29,20 +30,24 @@ Danfoss-TLX-2-HA/
 │       ├── config_flow.py           # UI config flow + options flow
 │       ├── coordinator.py           # DataUpdateCoordinator (polls inverter)
 │       ├── sensor.py                # SensorEntity subclasses
-│       ├── strings.json             # German UI strings
+│       ├── diagnostics.py           # Diagnostics platform (config entry diagnostics)
+│       ├── strings.json             # German UI strings (config, exceptions, entities)
+│       ├── icons.json               # MDI icon translations for all sensor entities
+│       ├── quality_scale.yaml       # HA Quality Scale Gold declaration
 │       ├── etherlynx.py             # EtherLynx protocol library (copied from root)
 │       ├── brand/
 │       │   ├── icon.png             # HACS brand icon (256×256)
 │       │   └── logo.png             # HACS brand logo (256×256)
 │       └── translations/
-│           └── en.json              # English UI translations
-├── tests/                           # pytest test suite (~98 tests, 88% coverage)
+│           └── en.json              # English UI translations (config, exceptions, entities)
+├── tests/                           # pytest test suite (~152 tests, 97% coverage)
 │   ├── __init__.py
 │   ├── conftest.py                  # Shared fixtures (mock_hass, mock_config_entry, etc.)
-│   ├── test_etherlynx.py            # Protocol library tests (~53 tests)
-│   ├── test_coordinator.py          # Coordinator tests (~7 tests)
-│   ├── test_sensor.py               # Sensor entity tests (~13 tests)
-│   ├── test_config_flow.py          # Config flow tests (~7 tests)
+│   ├── test_etherlynx.py            # Protocol library tests (~58 tests)
+│   ├── test_coordinator.py          # Coordinator tests (~10 tests)
+│   ├── test_sensor.py               # Sensor entity tests (~34 tests)
+│   ├── test_config_flow.py          # Config flow tests (~14 tests)
+│   ├── test_diagnostics.py          # Diagnostics platform tests (~9 tests)
 │   ├── test_init.py                 # Integration setup tests (~3 tests)
 │   └── test_e2e_inverter.py         # E2E tests against real inverter (requires INVERTER_IP env var)
 ├── .github/
@@ -77,7 +82,7 @@ Danfoss-TLX-2-HA/
 Integration entry point. Calls `async_setup_entry` and `async_unload_entry`. Registers the `sensor` platform and sets up a listener to reload when options change.
 
 #### `manifest.json`
-HA integration manifest. Required fields: `domain`, `name`, `version`, `iot_class`, `config_flow`, `codeowners`, `documentation`, `issue_tracker`. No external `requirements` — the protocol library is stdlib-only. **Important**: keys must be ordered as `domain`, `name`, then remaining keys alphabetically (enforced by hassfest).
+HA integration manifest. Required fields: `domain`, `name`, `version`, `iot_class`, `config_flow`, `codeowners`, `documentation`, `issue_tracker`. Includes `quality_scale: "gold"` and `single_config_entry: false`. No external `requirements` — the protocol library is stdlib-only. **Important**: keys must be ordered as `domain`, `name`, then remaining keys alphabetically (enforced by hassfest).
 
 #### `const.py`
 All shared constants: `DOMAIN = "danfoss_tlx"`, `CONF_*` config keys, default values.
@@ -87,18 +92,29 @@ All shared constants: `DOMAIN = "danfoss_tlx"`, `CONF_*` config keys, default va
 - `DanfossOptionsFlow` — edit poll interval and PV string count post-setup
 
 #### `coordinator.py`
-`DanfossCoordinator(DataUpdateCoordinator)` — polls the inverter on a configurable interval. Runs `DanfossEtherLynx.read_all()` in an executor thread. Handles auto-discovery of serial on first connect, resets the client on consecutive failures so the next poll retriggers discovery.
+`DanfossCoordinator(DataUpdateCoordinator)` — polls the inverter on a configurable interval. Runs `DanfossEtherLynx.read_all()` in an executor thread. Handles auto-discovery of serial on first connect, resets the client on consecutive failures so the next poll retriggers discovery. Logs WARNING on first failure and INFO on recovery (log-when-unavailable). Uses `HomeAssistantError` with translation keys for all exceptions.
 
 #### `sensor.py`
 - `DanfossSensor` — one per entry in `TLX_PARAMETERS`; omits PV string 3 sensors when `pv_strings == 2`
-- `DanfossOperationModeSensor` — maps numeric `operation_mode` to a human-readable German text via `OPERATION_MODES`
+- `DanfossOperationModeSensor` — maps numeric `operation_mode` to a human-readable text
+- `DanfossEventSensor` — maps numeric `latest_event` to a human-readable text
+- All sensors use `_attr_translation_key` for entity translations (Gold requirement). Icons come from `icons.json`.
 - All sensors share a single HA device entry keyed by `(DOMAIN, entry.entry_id)`
+
+#### `diagnostics.py`
+Diagnostics platform for the Gold quality scale. Returns config data (serial redacted), coordinator state, and latest inverter readings via `async_get_config_entry_diagnostics`.
+
+#### `quality_scale.yaml`
+Declares compliance with all Bronze, Silver, and Gold quality scale rules. Rules that don't apply (discovery, reauthentication, actions, stale-devices) are marked as `exempt` with German comments.
 
 #### `etherlynx.py`
 Verbatim copy of `danfoss_etherlynx.py` kept inside the component package so HACS installs a self-contained directory. Any changes to the protocol library must be mirrored in both files.
 
 #### `strings.json` / `translations/en.json`
-UI strings for the config flow and options flow. `strings.json` is German (primary); `translations/en.json` is English for the HA translation system.
+UI strings organized in three sections: `config` (config flow), `options` (options flow), `exceptions` (translated error messages), `entity` (sensor name translations for all 52 entities). `strings.json` is German (primary); `translations/en.json` is English.
+
+#### `icons.json`
+MDI icon definitions for all 52 sensor entities under `entity.sensor.<key>.default`. Icons are grouped by category (energy, voltage, current, power, frequency, temperature, status).
 
 ---
 
@@ -302,8 +318,10 @@ When adding new parameters, follow this pattern exactly and include the Danfoss 
 1. Add a new `ParameterDef` entry to `TLX_PARAMETERS` in `danfoss_etherlynx.py`
 2. Mirror the identical change in `custom_components/danfoss_tlx/etherlynx.py`
 3. Verify the parameter ID, module ID, data type, and scaling factor against the PDF spec
-4. Test with `python3 danfoss_etherlynx.py <ip> --mode all` to confirm the raw value reads correctly
-5. The HACS sensor platform picks it up automatically — no changes to `sensor.py` needed
+4. Add the sensor's translation key to `strings.json` (`entity.sensor.<key>.name`) and `translations/en.json`
+5. Add the sensor's icon to `icons.json` (`entity.sensor.<key>.default`)
+6. Test with `python3 danfoss_etherlynx.py <ip> --mode all` to confirm the raw value reads correctly
+7. The HACS sensor platform picks it up automatically — no changes to `sensor.py` needed
 
 ---
 
@@ -319,7 +337,7 @@ When adding new parameters, follow this pattern exactly and include the Danfoss 
 
 ## Testing
 
-The project has a pytest-based test suite with ~98 tests and 88% code coverage.
+The project has a pytest-based test suite with ~152 tests and 97% code coverage.
 
 ### Running tests
 ```bash
@@ -334,7 +352,8 @@ pytest --cov=custom_components.danfoss_tlx --cov-report=term-missing
 - **`tests/test_etherlynx.py`** — Protocol library: packet building/parsing, socket mocking, registry validation
 - **`tests/test_coordinator.py`** — DataUpdateCoordinator: discovery, serial handling, error recovery
 - **`tests/test_sensor.py`** — Sensor entities: value mapping, PV string filtering, device info
-- **`tests/test_config_flow.py`** — Config/options flows: form rendering, connection testing
+- **`tests/test_config_flow.py`** — Config/options flows: form rendering, connection testing, error handling
+- **`tests/test_diagnostics.py`** — Diagnostics: config entry diagnostics, serial redaction, null data handling
 - **`tests/test_init.py`** — Integration setup/unload, platform forwarding
 - **`tests/test_e2e_inverter.py`** — End-to-end tests against a real inverter; skipped unless `INVERTER_IP` env var is set. Run with: `INVERTER_IP=x.x.x.x pytest tests/test_e2e_inverter.py -v -s`
 
@@ -342,7 +361,7 @@ pytest --cov=custom_components.danfoss_tlx --cov-report=term-missing
 - Mock `socket.socket` for protocol tests — never open real UDP sockets
 - Patch `DataUpdateCoordinator.__init__` with `return_value=None` in coordinator tests (avoids HA frame context requirement)
 - Use fixtures from `conftest.py` for consistent test data
-- The CI enforces `--cov-fail-under=85`
+- The CI enforces `--cov-fail-under=95`
 
 ---
 

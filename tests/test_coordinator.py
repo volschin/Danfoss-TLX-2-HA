@@ -3,6 +3,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from homeassistant.exceptions import HomeAssistantError
+
 from custom_components.danfoss_tlx.const import (
     CONF_INVERTER_SERIAL,
     CONF_SCAN_INTERVAL,
@@ -80,7 +82,7 @@ class TestDanfossCoordinator:
 
         coordinator = _make_coordinator(mock_hass, mock_config_entry)
 
-        with pytest.raises(RuntimeError, match="Keine Daten"):
+        with pytest.raises(HomeAssistantError):
             coordinator._fetch_data()
 
         mock_client.close.assert_called_once()
@@ -95,5 +97,5 @@ class TestDanfossCoordinator:
 
         coordinator = _make_coordinator(mock_hass, mock_config_entry)
 
-        with pytest.raises(RuntimeError, match="nicht erreichbar"):
+        with pytest.raises(HomeAssistantError):
             coordinator._fetch_data()

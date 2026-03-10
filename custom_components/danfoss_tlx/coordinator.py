@@ -7,6 +7,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
@@ -52,7 +53,11 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             return await self.hass.async_add_executor_job(self._fetch_data)
         except Exception as err:
-            raise UpdateFailed(f"Fehler beim Abrufen der Inverterdaten: {err}") from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="update_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
 
     def _fetch_data(self) -> dict[str, Any]:
         """Synchrone Datenabfrage (läuft im Thread-Pool)."""
@@ -65,8 +70,10 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 serial = self._client.discover()
                 if not serial:
                     self._client = None
-                    raise RuntimeError(
-                        f"Inverter unter {self._ip} nicht erreichbar"
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="inverter_unreachable",
+                        translation_placeholders={"ip": self._ip},
                     )
 
         self._inverter_serial = self._client.inverter_serial
@@ -76,6 +83,9 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Verbindung zurücksetzen, nächster Versuch mit Discovery
             self._client.close()
             self._client = None
-            raise RuntimeError("Keine Daten vom Inverter empfangen")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="no_data_received",
+            )
 
         return data

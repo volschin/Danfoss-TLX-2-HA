@@ -40,6 +40,17 @@
       }
     }
   },
+  "exceptions": {
+    "inverter_unreachable": {
+      "message": "Inverter unter {ip} nicht erreichbar."
+    },
+    "no_data_received": {
+      "message": "Keine Daten vom Inverter empfangen."
+    },
+    "update_failed": {
+      "message": "Fehler beim Abrufen der Inverterdaten: {error}"
+    }
+  },
   "entity": {
     "sensor": {
       "total_energy": { "name": "Gesamtproduktion" },

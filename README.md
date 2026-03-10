@@ -1,6 +1,8 @@
 # Danfoss TLX Pro → Home Assistant
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration) [![GitHub Release](https://img.shields.io/github/v/release/volschin/Danfoss-TLX-2-HA?style=for-the-badge)](https://github.com/volschin/Danfoss-TLX-2-HA/releases) [![License](https://img.shields.io/github/license/volschin/Danfoss-TLX-2-HA?style=for-the-badge)](LICENSE) [![Tests](https://img.shields.io/github/actions/workflow/status/volschin/Danfoss-TLX-2-HA/test.yml?style=for-the-badge&label=Tests)](https://github.com/volschin/Danfoss-TLX-2-HA/actions/workflows/test.yml)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration) [![GitHub Release](https://img.shields.io/github/v/release/volschin/Danfoss-TLX-2-HA?style=for-the-badge)](https://github.com/volschin/Danfoss-TLX-2-HA/releases) [![License](https://img.shields.io/github/license/volschin/Danfoss-TLX-2-HA?style=for-the-badge)](LICENSE)
+
+[![Tests](https://img.shields.io/github/actions/workflow/status/volschin/Danfoss-TLX-2-HA/test.yml?branch=main&style=for-the-badge&label=Tests)](https://github.com/volschin/Danfoss-TLX-2-HA/actions/workflows/test.yml) [![HACS Validation](https://img.shields.io/github/actions/workflow/status/volschin/Danfoss-TLX-2-HA/hacs.yml?branch=main&style=for-the-badge&label=HACS)](https://github.com/volschin/Danfoss-TLX-2-HA/actions/workflows/hacs.yml) [![Hassfest](https://img.shields.io/github/actions/workflow/status/volschin/Danfoss-TLX-2-HA/hassfest.yml?branch=main&style=for-the-badge&label=Hassfest)](https://github.com/volschin/Danfoss-TLX-2-HA/actions/workflows/hassfest.yml)
 
 Direkte Anbindung des Danfoss TLX Pro Wechselrichters an Home Assistant über das **EtherLynx-Protokoll** (UDP Port 48004) – ohne zusätzliche Hardware wie ESP32 oder RS485-Adapter.
 

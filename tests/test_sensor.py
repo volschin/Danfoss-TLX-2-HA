@@ -91,7 +91,7 @@ class TestDanfossSensor:
     def test_attributes(self, mock_coordinator, mock_config_entry):
         param = TLX_PARAMETERS["grid_power_total"]
         sensor = DanfossSensor(mock_coordinator, mock_config_entry, "grid_power_total", param)
-        assert sensor._attr_name == "Netzleistung Gesamt"
+        assert sensor._attr_translation_key == "grid_power_total"
         assert "grid_power_total" in sensor._attr_unique_id
         assert sensor._attr_native_unit_of_measurement == "W"
         assert sensor._attr_device_class == "power"
@@ -205,9 +205,9 @@ class TestDanfossOperationModeSensor:
 
     def test_attributes(self, mock_coordinator, mock_config_entry):
         sensor = DanfossOperationModeSensor(mock_coordinator, mock_config_entry)
-        assert sensor._attr_name == "Betriebsmodus"
+        assert sensor._attr_translation_key == "operation_mode_text"
         assert "operation_mode_text" in sensor._attr_unique_id
-        assert sensor._attr_icon == "mdi:solar-power"
+        assert not hasattr(sensor, "_attr_icon")
 
     def test_entity_category_diagnostic(self, mock_coordinator, mock_config_entry):
         """OperationModeSensor hat EntityCategory.DIAGNOSTIC."""
@@ -248,9 +248,9 @@ class TestDanfossEventSensor:
 
     def test_attributes(self, mock_coordinator, mock_config_entry):
         sensor = DanfossEventSensor(mock_coordinator, mock_config_entry)
-        assert sensor._attr_name == "Letztes Ereignis"
+        assert sensor._attr_translation_key == "latest_event_text"
         assert "latest_event_text" in sensor._attr_unique_id
-        assert sensor._attr_icon == "mdi:alert-circle-outline"
+        assert not hasattr(sensor, "_attr_icon")
 
     def test_entity_category_diagnostic(self, mock_coordinator, mock_config_entry):
         """EventSensor hat EntityCategory.DIAGNOSTIC."""

@@ -12,14 +12,16 @@ Autor: Generiert für Home Assistant Integration
 Lizenz: MIT
 """
 
+from __future__ import annotations
+
+import json
+import logging
 import socket
 import struct
-import logging
-import json
 import time
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Optional, Dict, List, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +104,7 @@ class ParameterDef:
 
 # Vollständige Parameter-Tabelle für Danfoss TLX Pro
 # Quelle: Appendix C - Inverter Parameters (Kapitel 6.3)
-TLX_PARAMETERS: Dict[str, ParameterDef] = {
+TLX_PARAMETERS: dict[str, ParameterDef] = {
     # ── Rohwerte (Index 0x01) ──────────────────────────────────────────
     "total_energy": ParameterDef(
         name="Gesamtproduktion",
@@ -505,7 +507,7 @@ OPERATION_MODES = {i: get_operation_mode_text(i) for i in range(90)}
 
 # Ereignis-/Fehlercodes basierend auf der Danfoss Dokumentation
 # Quelle: greenenergy-repair.com/blogs/errors/danfoss + Danfoss TLX User Guide
-EVENT_CODES: Dict[int, str] = {
+EVENT_CODES: dict[int, str] = {
     0: "Kein Ereignis",
     1: "Netzspannung L1 zu niedrig",
     2: "Netzspannung L2 zu niedrig",
@@ -637,7 +639,7 @@ def build_ping_packet(source_serial: str = MASTER_SERIAL) -> bytes:
 def build_get_parameters_packet(
     source_serial: str,
     dest_serial: str,
-    parameters: List[ParameterDef],
+    parameters: list[ParameterDef],
     transaction_no: int = 0,
 ) -> bytes:
     """Baut ein Get Parameter Values Paket (Kapitel 5.4.2).
@@ -688,7 +690,7 @@ def build_get_parameters_packet(
     return header + bytes(data)
 
 
-def parse_ping_response(data: bytes) -> Optional[str]:
+def parse_ping_response(data: bytes) -> str | None:
     """Parst eine Ping-Response und extrahiert die Inverter-Seriennummer.
 
     Laut Doku (Kapitel 5.4.1 / 6.4.2):
@@ -713,8 +715,8 @@ def parse_ping_response(data: bytes) -> Optional[str]:
 
 def parse_parameter_response(
     data: bytes,
-    requested_params: List[ParameterDef],
-) -> Dict[str, Any]:
+    requested_params: list[ParameterDef],
+) -> dict[str, Any]:
     """Parst eine Get Parameter Values Response (Kapitel 5.4.2.2).
 
     Response hat gleiche Struktur wie Request, aber mit gefüllten Werten.
@@ -804,7 +806,7 @@ def _parse_value(
     raw: bytes,
     response_type: int,
     expected_type: int,
-) -> Optional[float]:
+) -> float | None:
     """Parst einen 4-Byte Parameterwert basierend auf dem Datentyp.
 
     Werte sind im 4-Byte-Feld rechts-aligniert (Big-Endian / Network Byte Order).
@@ -873,9 +875,9 @@ class DanfossEtherLynx:
         self.port = port
         self.timeout = timeout
         self.master_serial = master_serial
-        self._inverter_serial: Optional[str] = None
+        self._inverter_serial: str | None = None
         self._transaction_counter = 0
-        self._sock: Optional[socket.socket] = None
+        self._sock: socket.socket | None = None
 
     def _get_socket(self) -> socket.socket:
         """Erstellt oder gibt bestehenden UDP-Socket zurück."""
@@ -894,8 +896,8 @@ class DanfossEtherLynx:
     def _send_receive(
         self,
         packet: bytes,
-        timeout: Optional[float] = None,
-    ) -> Optional[bytes]:
+        timeout: float | None = None,
+    ) -> bytes | None:
         """Sendet UDP-Paket und wartet auf Antwort."""
         sock = self._get_socket()
         old_timeout = sock.gettimeout()
@@ -940,7 +942,7 @@ class DanfossEtherLynx:
     def __exit__(self, *args):
         self.close()
 
-    def discover(self) -> Optional[str]:
+    def discover(self) -> str | None:
         """Entdeckt den Inverter per Ping und gibt die Seriennummer zurück.
 
         Sendet ein Full Broadcast Ping (Kapitel 5.4.1).
@@ -963,7 +965,7 @@ class DanfossEtherLynx:
         return serial
 
     @property
-    def inverter_serial(self) -> Optional[str]:
+    def inverter_serial(self) -> str | None:
         """Die Seriennummer des entdeckten Inverters."""
         return self._inverter_serial
 
@@ -974,9 +976,9 @@ class DanfossEtherLynx:
 
     def read_parameters(
         self,
-        param_keys: List[str],
+        param_keys: list[str],
         max_per_request: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Liest die angegebenen Parameter vom Inverter.
 
         Args:
@@ -1031,7 +1033,7 @@ class DanfossEtherLynx:
 
         return all_results
 
-    def read_all(self) -> Dict[str, Any]:
+    def read_all(self) -> dict[str, Any]:
         """Liest alle definierten Parameter vom Inverter.
 
         Gibt ein Dict zurück mit allen Messwerten, Status- und
@@ -1040,7 +1042,7 @@ class DanfossEtherLynx:
         all_keys = list(TLX_PARAMETERS.keys())
         return self.read_parameters(all_keys)
 
-    def read_realtime(self) -> Dict[str, Any]:
+    def read_realtime(self) -> dict[str, Any]:
         """Liest nur die häufig benötigten Echtzeit-Parameter.
 
         Optimiert für schnelle, häufige Abfragen (z.B. alle 10 Sekunden).
@@ -1065,7 +1067,7 @@ class DanfossEtherLynx:
         ]
         return self.read_parameters(realtime_keys)
 
-    def read_energy(self) -> Dict[str, Any]:
+    def read_energy(self) -> dict[str, Any]:
         """Liest Energie-/Produktionswerte (seltener abgefragt)."""
         energy_keys = [
             "total_energy", "energy_today",

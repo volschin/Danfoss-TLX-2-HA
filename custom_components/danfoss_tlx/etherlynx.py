@@ -502,7 +502,7 @@ def get_operation_mode_text(mode_id: int) -> str:
     return f"Unbekannt ({mode_id})"
 
 
-# Abwärtskompatibilität: OPERATION_MODES wird in sensor.py importiert
+# Wird in danfoss_ha_bridge.py importiert
 OPERATION_MODES = {i: get_operation_mode_text(i) for i in range(90)}
 
 # Ereignis-/Fehlercodes basierend auf der Danfoss Dokumentation
@@ -715,7 +715,7 @@ def parse_ping_response(data: bytes) -> str | None:
 
 def parse_parameter_response(
     data: bytes,
-    requested_params: list[ParameterDef],
+    requested_params: list[tuple[str, ParameterDef]],
 ) -> dict[str, Any]:
     """Parst eine Get Parameter Values Response (Kapitel 5.4.2.2).
 
@@ -756,7 +756,7 @@ def parse_parameter_response(
 
     # Parse jedes Parameter-Ergebnis (je 8 Bytes, ab Offset 4)
     offset = 4
-    for i, param_def in enumerate(requested_params):
+    for i, (key, param_def) in enumerate(requested_params):
         if offset + 8 > len(payload):
             logger.warning(f"Payload endet vor Parameter {i+1}")
             break
@@ -788,14 +788,7 @@ def parse_parameter_response(
         if value is not None and param_def.scale != 1.0:
             value = round(value * param_def.scale, 3)
 
-        # Ergebnis-Key ist der Parameter-Name aus der Definition
-        # Finde den Key in TLX_PARAMETERS
-        for key, pdef in TLX_PARAMETERS.items():
-            if pdef is param_def:
-                results[key] = value
-                break
-        else:
-            results[f"param_{param_index}_{param_subindex}"] = value
+        results[key] = value
 
         offset += 8
 
@@ -900,9 +893,8 @@ class DanfossEtherLynx:
     ) -> bytes | None:
         """Sendet UDP-Paket und wartet auf Antwort."""
         sock = self._get_socket()
-        old_timeout = sock.gettimeout()
-
         if timeout is not None:
+            old_timeout = sock.gettimeout()
             sock.settimeout(timeout)
 
         try:
@@ -928,7 +920,8 @@ class DanfossEtherLynx:
             logger.error(f"Socket-Fehler: {e}")
             return None
         finally:
-            sock.settimeout(old_timeout)
+            if timeout is not None:
+                sock.settimeout(old_timeout)
 
     def close(self):
         """Schließt den UDP-Socket."""
@@ -1006,12 +999,11 @@ class DanfossEtherLynx:
         # In Batches aufteilen (EtherLynx unterstützt N Parameter pro Request)
         for batch_start in range(0, len(params), max_per_request):
             batch = params[batch_start:batch_start + max_per_request]
-            batch_defs = [pdef for _, pdef in batch]
 
             packet = build_get_parameters_packet(
                 source_serial=self.master_serial,
                 dest_serial=self._inverter_serial,
-                parameters=batch_defs,
+                parameters=[pdef for _, pdef in batch],
                 transaction_no=self._next_transaction(),
             )
 
@@ -1024,7 +1016,7 @@ class DanfossEtherLynx:
                 )
                 continue
 
-            results = parse_parameter_response(response, batch_defs)
+            results = parse_parameter_response(response, batch)
             all_results.update(results)
 
             # Kurze Pause zwischen Batches

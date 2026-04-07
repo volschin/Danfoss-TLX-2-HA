@@ -9,7 +9,7 @@ from custom_components.danfoss_tlx.const import (
     CONF_PV_STRINGS,
     CONF_SCAN_INTERVAL,
 )
-from custom_components.danfoss_tlx.config_flow import DanfossConfigFlow, DanfossOptionsFlow
+from custom_components.danfoss_tlx.config_flow import DanfossConfigFlow, DanfossOptionsFlow, ParameterReadError
 
 
 class TestDanfossConfigFlow:
@@ -90,7 +90,7 @@ class TestDanfossConfigFlow:
             assert result == "DISCOVERED"
 
     def test_try_connect_parameter_read_fails(self):
-        """Parameter-Read schlägt fehl → RuntimeError."""
+        """Parameter-Read schlägt fehl → ParameterReadError."""
         with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
             mock_client = MagicMock()
             mock_client.discover.return_value = "DISCOVERED"
@@ -98,14 +98,14 @@ class TestDanfossConfigFlow:
             mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
             mock_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-            with pytest.raises(RuntimeError, match="parameter_read_failed"):
+            with pytest.raises(ParameterReadError):
                 DanfossConfigFlow._try_connect("192.168.1.100", "")
 
     @pytest.mark.asyncio
     async def test_parameter_read_failure_shows_error(self, mock_hass):
         """Parameter-Read-Fehler zeigt cannot_read_parameters Error."""
         mock_hass.async_add_executor_job = AsyncMock(
-            side_effect=RuntimeError("parameter_read_failed")
+            side_effect=ParameterReadError()
         )
 
         flow = DanfossConfigFlow()
@@ -129,7 +129,7 @@ class TestDanfossConfigFlow:
             mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
             mock_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-            with pytest.raises(RuntimeError, match="parameter_read_failed"):
+            with pytest.raises(ParameterReadError):
                 DanfossConfigFlow._try_connect("192.168.1.100", "KNOWN_SER")
 
 
@@ -266,9 +266,9 @@ class TestDanfossConfigFlowErrors:
 
     @pytest.mark.asyncio
     async def test_reconfigure_parameter_read_failed(self, mock_hass, mock_config_entry):
-        """Reconfigure: RuntimeError parameter_read_failed zeigt cannot_read_parameters."""
+        """Reconfigure: ParameterReadError zeigt cannot_read_parameters."""
         mock_hass.async_add_executor_job = AsyncMock(
-            side_effect=RuntimeError("parameter_read_failed")
+            side_effect=ParameterReadError()
         )
 
         flow = DanfossConfigFlow()

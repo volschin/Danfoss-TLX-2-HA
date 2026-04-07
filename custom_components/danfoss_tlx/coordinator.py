@@ -29,7 +29,6 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._ip: str = entry.data[CONF_INVERTER_IP]
         self._inverter_serial: str | None = entry.data.get(CONF_INVERTER_SERIAL)
         self._client: DanfossEtherLynx | None = None
-        self._last_update_success: bool | None = None
 
         interval = entry.options.get(
             CONF_SCAN_INTERVAL,
@@ -54,25 +53,22 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             data = await self.hass.async_add_executor_job(self._fetch_data)
         except Exception as err:
-            if self._last_update_success is not False:
+            if self.last_update_success:
                 _LOGGER.warning(
                     "Inverter %s nicht mehr erreichbar: %s", self._ip, err
                 )
-            self._last_update_success = False
             raise UpdateFailed(
                 translation_domain=DOMAIN,
                 translation_key="update_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
 
-        if self._last_update_success is False:
+        if not self.last_update_success:
             _LOGGER.info("Inverter %s wieder erreichbar", self._ip)
-        self._last_update_success = True
         return data
 
     def _fetch_data(self) -> dict[str, Any]:
         """Synchrone Datenabfrage (läuft im Thread-Pool)."""
-        # Client initialisieren falls nötig
         if self._client is None:
             self._client = DanfossEtherLynx(self._ip)
             if self._inverter_serial:

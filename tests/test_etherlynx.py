@@ -248,7 +248,7 @@ class TestParseParameterResponse:
         param = TLX_PARAMETERS["grid_power_total"]
         raw = struct.pack('>I', 2903)
         response = make_parameter_response([(param, raw)])
-        result = parse_parameter_response(response, [param])
+        result = parse_parameter_response(response, [("grid_power_total", param)])
         assert result["grid_power_total"] == 2903.0
 
     def test_multi_params(self, make_parameter_response):
@@ -258,7 +258,7 @@ class TestParseParameterResponse:
         # operation_mode: UNSIGNED16, rechts-aligniert im 4-Byte-Feld
         raw2 = b'\x00\x00' + struct.pack('>H', 4)
         response = make_parameter_response([(p1, raw1), (p2, raw2)])
-        result = parse_parameter_response(response, [p1, p2])
+        result = parse_parameter_response(response, [("grid_power_total", p1), ("operation_mode", p2)])
         assert result["grid_power_total"] == 5000.0
         assert result["operation_mode"] == 4.0
 
@@ -267,14 +267,14 @@ class TestParseParameterResponse:
         # UNSIGNED16, rechts-aligniert: 2 Null-Bytes + 2 Wert-Bytes
         raw = b'\x00\x00' + struct.pack('>H', 3520)
         response = make_parameter_response([(param, raw)])
-        result = parse_parameter_response(response, [param])
+        result = parse_parameter_response(response, [("pv_voltage_1", param)])
         assert result["pv_voltage_1"] == 352.0
 
     def test_error_bit_skips_param(self, make_parameter_response):
         param = TLX_PARAMETERS["grid_power_total"]
         raw = struct.pack('>I', 999)
         response = make_parameter_response([(param, raw)], error_indices={0})
-        result = parse_parameter_response(response, [param])
+        result = parse_parameter_response(response, [("grid_power_total", param)])
         assert "grid_power_total" not in result
 
     def test_missing_response_flag(self):
@@ -647,7 +647,7 @@ class TestDanfossEtherLynxEdgeCases:
         response = make_parameter_response([(param1, raw1), (param2, raw2)])
 
         # Request only param1, but response has 2 entries
-        result = parse_parameter_response(response, [param1])
+        result = parse_parameter_response(response, [("grid_power_total", param1)])
 
         # Should still parse the first param even with mismatch
         assert "grid_power_total" in result

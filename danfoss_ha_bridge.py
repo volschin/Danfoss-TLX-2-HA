@@ -202,7 +202,12 @@ mqtt_client.publish(topic, str(value), retain=True)
 # ============================================================================
 
 def run_mqtt_daemon(config: BridgeConfig):
-“”“Hauptschleife: Pollt den Inverter und publiziert über MQTT.”””
+“””Hauptschleife: Pollt den Inverter und publiziert über MQTT.”””
+asyncio.run(_async_run_mqtt_daemon(config))
+
+
+async def _async_run_mqtt_daemon(config: BridgeConfig):
+“””Asynchrone Implementierung für run_mqtt_daemon.”””
 try:
 import paho.mqtt.client as mqtt
 except ImportError:
@@ -214,153 +219,153 @@ sys.exit(1)
 
 ```
 # MQTT verbinden
-mqtt_client = mqtt.Client(client_id="danfoss_etherlynx_bridge")
+mqtt_client = mqtt.Client(client_id=”danfoss_etherlynx_bridge”)
 if config.mqtt_user:
     mqtt_client.username_pw_set(config.mqtt_user, config.mqtt_password)
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        logger.info("MQTT verbunden")
+        logger.info(“MQTT verbunden”)
         client.publish(
-            f"{config.mqtt_topic_prefix}/status", "online", retain=True
+            f”{config.mqtt_topic_prefix}/status”, “online”, retain=True
         )
     else:
-        logger.error(f"MQTT Verbindungsfehler: {rc}")
+        logger.error(f”MQTT Verbindungsfehler: {rc}”)
 
 def on_disconnect(client, userdata, rc):
-    logger.warning(f"MQTT getrennt (rc={rc})")
+    logger.warning(f”MQTT getrennt (rc={rc})”)
 
 mqtt_client.on_connect = on_connect
 mqtt_client.on_disconnect = on_disconnect
 mqtt_client.will_set(
-    f"{config.mqtt_topic_prefix}/status", "offline", retain=True
+    f”{config.mqtt_topic_prefix}/status”, “offline”, retain=True
 )
 
 try:
     mqtt_client.connect(config.mqtt_host, config.mqtt_port)
 except Exception as e:
-    logger.error(f"MQTT Verbindung fehlgeschlagen: {e}")
+    logger.error(f”MQTT Verbindung fehlgeschlagen: {e}”)
     sys.exit(1)
 
 mqtt_client.loop_start()
 
-# EtherLynx Client
-client = DanfossEtherLynx(config.inverter_ip)
+# EtherLynx Client – ein einziger async-Kontext für die gesamte Laufzeit
+async with DanfossEtherLynx(config.inverter_ip) as client:
+    if config.inverter_serial:
+        client.inverter_serial = config.inverter_serial
+    else:
+        serial = await client.discover()
+        if not serial:
+            logger.error(
+                “Inverter nicht gefunden. Prüfen Sie:\n”
+                “  1. IP-Adresse korrekt?\n”
+                “  2. Inverter eingeschaltet (Tageslicht)?\n”
+                “  3. Ethernet-Kabel verbunden?\n”
+                “  4. UDP Port 48004 nicht blockiert?”
+            )
+            mqtt_client.loop_stop()
+            mqtt_client.disconnect()
+            sys.exit(1)
 
-if config.inverter_serial:
-    client.inverter_serial = config.inverter_serial
-else:
-    serial = asyncio.run(client.discover())
-    if not serial:
-        logger.error(
-            "Inverter nicht gefunden. Prüfen Sie:\n"
-            "  1. IP-Adresse korrekt?\n"
-            "  2. Inverter eingeschaltet (Tageslicht)?\n"
-            "  3. Ethernet-Kabel verbunden?\n"
-            "  4. UDP Port 48004 nicht blockiert?"
-        )
-        sys.exit(1)
+    # MQTT Discovery publizieren
+    publish_mqtt_discovery(mqtt_client, config, client.inverter_serial)
 
-# MQTT Discovery publizieren
-publish_mqtt_discovery(mqtt_client, config, client.inverter_serial)
+    # Signal-Handler für sauberes Beenden
+    running = True
+    def signal_handler(sig, frame):
+        nonlocal running
+        logger.info(“Beende...”)
+        running = False
 
-# Signal-Handler für sauberes Beenden
-running = True
-def signal_handler(sig, frame):
-    nonlocal running
-    logger.info("Beende...")
-    running = False
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+    # Polling-Loop
+    last_realtime = 0
+    last_energy = 0
+    last_system = 0
+    consecutive_errors = 0
+    MAX_ERRORS = 10
 
-# Polling-Loop
-last_realtime = 0
-last_energy = 0
-last_system = 0
-consecutive_errors = 0
-MAX_ERRORS = 10
+    logger.info(
+        f”Starte Polling: Realtime alle {config.poll_interval_realtime}s, “
+        f”Energie alle {config.poll_interval_energy}s”
+    )
 
-logger.info(
-    f"Starte Polling: Realtime alle {config.poll_interval_realtime}s, "
-    f"Energie alle {config.poll_interval_energy}s"
-)
+    while running:
+        now = time.time()
 
-while running:
-    now = time.time()
-
-    try:
-        # Realtime-Daten (häufig)
-        if now - last_realtime >= config.poll_interval_realtime:
-            data = asyncio.run(client.read_realtime())
-            if data:
-                # Betriebsmodus-Text hinzufügen
-                if "operation_mode" in data:
-                    data["operation_mode_text"] = client.get_status_text(
-                        data["operation_mode"]
+        try:
+            # Realtime-Daten (häufig)
+            if now - last_realtime >= config.poll_interval_realtime:
+                data = await client.read_realtime()
+                if data:
+                    # Betriebsmodus-Text hinzufügen
+                    if “operation_mode” in data:
+                        data[“operation_mode_text”] = client.get_status_text(
+                            data[“operation_mode”]
+                        )
+                    publish_values(mqtt_client, config, data)
+                    consecutive_errors = 0
+                    last_realtime = now
+                else:
+                    consecutive_errors += 1
+                    logger.warning(
+                        f”Keine Realtime-Daten “
+                        f”({consecutive_errors}/{MAX_ERRORS})”
                     )
-                publish_values(mqtt_client, config, data)
-                consecutive_errors = 0
-                last_realtime = now
-            else:
-                consecutive_errors += 1
-                logger.warning(
-                    f"Keine Realtime-Daten "
-                    f"({consecutive_errors}/{MAX_ERRORS})"
-                )
 
-        # Energie-Daten (selten)
-        if now - last_energy >= config.poll_interval_energy:
-            data = asyncio.run(client.read_energy())
-            if data:
-                publish_values(mqtt_client, config, data)
-                last_energy = now
+            # Energie-Daten (selten)
+            if now - last_energy >= config.poll_interval_energy:
+                data = await client.read_energy()
+                if data:
+                    publish_values(mqtt_client, config, data)
+                    last_energy = now
 
-        # System-Daten (sehr selten)
-        if now - last_system >= config.poll_interval_system:
-            system_keys = [
-                "nominal_power", "sw_version", "hardware_type"
-            ]
-            data = asyncio.run(client.read_parameters(system_keys))
-            if data:
-                publish_values(mqtt_client, config, data)
-                last_system = now
+            # System-Daten (sehr selten)
+            if now - last_system >= config.poll_interval_system:
+                system_keys = [
+                    “nominal_power”, “sw_version”, “hardware_type”
+                ]
+                data = await client.read_parameters(system_keys)
+                if data:
+                    publish_values(mqtt_client, config, data)
+                    last_system = now
 
-        # Zu viele aufeinanderfolgende Fehler → Inverter offline
-        if consecutive_errors >= MAX_ERRORS:
-            mqtt_client.publish(
-                f"{config.mqtt_topic_prefix}/status",
-                "offline", retain=True
-            )
-            logger.warning(
-                f"Inverter nicht erreichbar nach {MAX_ERRORS} Versuchen. "
-                f"Warte 60s..."
-            )
-            time.sleep(60)
-            consecutive_errors = 0
-            # Neuen Discovery-Versuch
-            asyncio.run(client.discover())
-            if client.inverter_serial:
+            # Zu viele aufeinanderfolgende Fehler → Inverter offline
+            if consecutive_errors >= MAX_ERRORS:
                 mqtt_client.publish(
-                    f"{config.mqtt_topic_prefix}/status",
-                    "online", retain=True
+                    f”{config.mqtt_topic_prefix}/status”,
+                    “offline”, retain=True
                 )
+                logger.warning(
+                    f”Inverter nicht erreichbar nach {MAX_ERRORS} Versuchen. “
+                    f”Warte 60s...”
+                )
+                await asyncio.sleep(60)
+                consecutive_errors = 0
+                # Neuen Discovery-Versuch
+                await client.discover()
+                if client.inverter_serial:
+                    mqtt_client.publish(
+                        f”{config.mqtt_topic_prefix}/status”,
+                        “online”, retain=True
+                    )
 
-    except Exception as e:
-        logger.error(f"Fehler in der Hauptschleife: {e}", exc_info=True)
-        consecutive_errors += 1
+        except Exception as e:
+            logger.error(f”Fehler in der Hauptschleife: {e}”, exc_info=True)
+            consecutive_errors += 1
 
-    # Kurz schlafen
-    time.sleep(1)
+        # Kurz schlafen
+        await asyncio.sleep(1)
 
-# Aufräumen
+# Aufräumen (außerhalb des async with – client ist bereits geschlossen)
 mqtt_client.publish(
-    f"{config.mqtt_topic_prefix}/status", "offline", retain=True
+    f”{config.mqtt_topic_prefix}/status”, “offline”, retain=True
 )
 mqtt_client.loop_stop()
 mqtt_client.disconnect()
-asyncio.run(client.close())
-logger.info("Beendet.")
+logger.info(“Beendet.”)
 ```
 
 # ============================================================================

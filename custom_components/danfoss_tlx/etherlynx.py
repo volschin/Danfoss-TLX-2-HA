@@ -14,6 +14,7 @@ Lizenz: MIT
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import socket
@@ -836,6 +837,58 @@ def _parse_value(
     except struct.error as e:
         logger.error(f"Struct-Fehler beim Parsen: {e}")
         return None
+
+
+# ============================================================================
+# Asyncio DatagramProtocol
+# ============================================================================
+
+
+class _EtherLynxProtocol(asyncio.DatagramProtocol):
+    """Asyncio DatagramProtocol für EtherLynx-UDP-Kommunikation."""
+
+    def __init__(self) -> None:
+        self._response_future: asyncio.Future[bytes] | None = None
+        self.transport: asyncio.DatagramTransport | None = None
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        """Transport-Verbindung hergestellt."""
+        self.transport = transport  # type: ignore[assignment]
+
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
+        """Empfangenes UDP-Datagramm an wartenden Aufrufer weiterleiten."""
+        if self._response_future and not self._response_future.done():
+            self._response_future.set_result(data)
+
+    def error_received(self, exc: Exception) -> None:
+        """Transport-Fehler an wartenden Aufrufer weiterleiten."""
+        if self._response_future and not self._response_future.done():
+            self._response_future.set_exception(exc)
+
+    def connection_lost(self, exc: Exception | None) -> None:
+        """Verbindung geschlossen."""
+
+    async def send_receive(self, data: bytes, timeout: float) -> bytes | None:
+        """Sendet ein Datagramm und wartet auf die Antwort.
+
+        Gibt None zurück wenn kein Datagramm innerhalb von timeout empfangen.
+        """
+        assert self.transport is not None
+        loop = asyncio.get_running_loop()
+        self._response_future = loop.create_future()
+        self.transport.sendto(data)
+        try:
+            return await asyncio.wait_for(self._response_future, timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Timeout beim Warten auf Antwort (%.1f s)", timeout
+            )
+            return None
+        except OSError as exc:
+            logger.error("Socket-Fehler: %s", exc)
+            return None
+        finally:
+            self._response_future = None
 
 
 # ============================================================================

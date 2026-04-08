@@ -1,7 +1,9 @@
 """Tests für das EtherLynx-Protokollmodul."""
+import asyncio
 import struct
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
+import pytest
 
 from custom_components.danfoss_tlx.etherlynx import (
     ETHERLYNX_PORT,
@@ -22,6 +24,38 @@ from custom_components.danfoss_tlx.etherlynx import (
     parse_ping_response,
     parse_parameter_response,
 )
+
+
+# ============================================================================
+# _EtherLynxProtocol Tests
+# ============================================================================
+
+
+class TestEtherLynxProtocol:
+    @pytest.mark.asyncio
+    async def test_send_receive_returns_response(self):
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        mock_transport = MagicMock()
+        protocol.connection_made(mock_transport)
+
+        async def deliver():
+            await asyncio.sleep(0)
+            protocol.datagram_received(b"hello", ("127.0.0.1", 48004))
+
+        asyncio.create_task(deliver())
+        result = await protocol.send_receive(b"ping", timeout=1.0)
+        assert result == b"hello"
+
+    @pytest.mark.asyncio
+    async def test_send_receive_timeout(self):
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        mock_transport = MagicMock()
+        protocol.connection_made(mock_transport)
+
+        result = await protocol.send_receive(b"ping", timeout=0.01)
+        assert result is None
 
 
 # ============================================================================

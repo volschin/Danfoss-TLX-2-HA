@@ -873,9 +873,9 @@ class _EtherLynxProtocol(asyncio.DatagramProtocol):
 
         Gibt None zurück wenn kein Datagramm innerhalb von timeout empfangen.
         """
-        assert self.transport is not None
-        loop = asyncio.get_running_loop()
-        self._response_future = loop.create_future()
+        if self.transport is None:
+            raise RuntimeError("send_receive aufgerufen ohne aktive Verbindung")
+        self._response_future = asyncio.get_running_loop().create_future()
         self.transport.sendto(data)
         try:
             return await asyncio.wait_for(self._response_future, timeout=timeout)

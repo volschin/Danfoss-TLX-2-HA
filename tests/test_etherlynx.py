@@ -1,7 +1,7 @@
 """Tests für das EtherLynx-Protokollmodul."""
 import asyncio
 import struct
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -55,6 +55,20 @@ class TestEtherLynxProtocol:
         protocol.connection_made(mock_transport)
 
         result = await protocol.send_receive(b"ping", timeout=0.01)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_send_receive_propagates_transport_error(self):
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        protocol.connection_made(MagicMock())
+
+        async def inject_error():
+            await asyncio.sleep(0)
+            protocol.error_received(OSError("Netzwerk nicht erreichbar"))
+
+        asyncio.create_task(inject_error())
+        result = await protocol.send_receive(b"ping", timeout=1.0)
         assert result is None
 
 

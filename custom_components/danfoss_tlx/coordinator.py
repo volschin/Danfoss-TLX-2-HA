@@ -49,9 +49,9 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self._inverter_serial
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Holt Daten vom Inverter (wird im Executor-Thread ausgeführt)."""
+        """Holt Daten vom Inverter."""
         try:
-            data = await self.hass.async_add_executor_job(self._fetch_data)
+            data = await self._fetch_data()
         except Exception as err:
             if self.last_update_success:
                 _LOGGER.warning(
@@ -67,15 +67,16 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.info("Inverter %s wieder erreichbar", self._ip)
         return data
 
-    def _fetch_data(self) -> dict[str, Any]:
-        """Synchrone Datenabfrage (läuft im Thread-Pool)."""
+    async def _fetch_data(self) -> dict[str, Any]:
+        """Asynchrone Datenabfrage direkt im Event-Loop."""
         if self._client is None:
             self._client = DanfossEtherLynx(self._ip)
             if self._inverter_serial:
                 self._client.inverter_serial = self._inverter_serial
             else:
-                serial = self._client.discover()
+                serial = await self._client.discover()
                 if not serial:
+                    await self._client.close()
                     self._client = None
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
@@ -85,10 +86,9 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._inverter_serial = self._client.inverter_serial
 
-        data = self._client.read_all()
+        data = await self._client.read_all()
         if not data:
-            # Verbindung zurücksetzen, nächster Versuch mit Discovery
-            self._client.close()
+            await self._client.close()
             self._client = None
             raise HomeAssistantError(
                 translation_domain=DOMAIN,

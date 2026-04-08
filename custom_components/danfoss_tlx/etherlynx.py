@@ -17,9 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import socket
 import struct
-import time
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any
@@ -897,17 +895,12 @@ class _EtherLynxProtocol(asyncio.DatagramProtocol):
 
 
 class DanfossEtherLynx:
-    """Client für die Kommunikation mit Danfoss TLX Pro über EtherLynx/UDP.
+    """Async-Client für die Kommunikation mit Danfoss TLX Pro über EtherLynx/UDP.
 
     Verwendung:
-        client = DanfossEtherLynx("192.168.1.100")
-
-        # Inverter entdecken
-        serial = client.discover()
-
-        # Alle Parameter abfragen
-        data = client.read_all()
-        print(json.dumps(data, indent=2))
+        async with DanfossEtherLynx("192.168.1.100") as client:
+            serial = await client.discover()
+            data = await client.read_all()
     """
 
     def __init__(
@@ -916,99 +909,53 @@ class DanfossEtherLynx:
         port: int = ETHERLYNX_PORT,
         timeout: float = DEFAULT_TIMEOUT,
         master_serial: str = MASTER_SERIAL,
-    ):
+    ) -> None:
         self.inverter_ip = inverter_ip
         self.port = port
         self.timeout = timeout
         self.master_serial = master_serial
         self._inverter_serial: str | None = None
         self._transaction_counter = 0
-        self._sock: socket.socket | None = None
+        self._transport: asyncio.DatagramTransport | None = None
+        self._protocol: _EtherLynxProtocol | None = None
 
-    def _get_socket(self) -> socket.socket:
-        """Erstellt oder gibt bestehenden UDP-Socket zurück."""
-        if self._sock is None:
-            self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self._sock.settimeout(self.timeout)
-            # Bind auf beliebigen lokalen Port
-            self._sock.bind(('', 0))
-        return self._sock
+    async def _get_connection(self) -> _EtherLynxProtocol:
+        """Öffnet oder gibt bestehenden Datagram-Endpoint zurück."""
+        if self._transport is None or self._transport.is_closing():
+            loop = asyncio.get_running_loop()
+            self._transport, self._protocol = await loop.create_datagram_endpoint(
+                _EtherLynxProtocol,
+                remote_addr=(self.inverter_ip, self.port),
+            )
+        assert self._protocol is not None
+        return self._protocol
+
+    async def _send_receive_async(
+        self,
+        packet: bytes,
+        timeout: float | None = None,
+    ) -> bytes | None:
+        """Sendet UDP-Paket und wartet auf Antwort."""
+        protocol = await self._get_connection()
+        return await protocol.send_receive(packet, timeout=timeout or self.timeout)
 
     def _next_transaction(self) -> int:
         """Inkrementiert und gibt die nächste Transaktionsnummer zurück."""
         self._transaction_counter = (self._transaction_counter + 1) & 0xFF
         return self._transaction_counter
 
-    def _send_receive(
-        self,
-        packet: bytes,
-        timeout: float | None = None,
-    ) -> bytes | None:
-        """Sendet UDP-Paket und wartet auf Antwort."""
-        sock = self._get_socket()
-        if timeout is not None:
-            old_timeout = sock.gettimeout()
-            sock.settimeout(timeout)
+    async def close(self) -> None:
+        """Schließt den UDP-Datagram-Endpoint."""
+        if self._transport is not None:
+            self._transport.close()
+            self._transport = None
+            self._protocol = None
 
-        try:
-            sock.sendto(packet, (self.inverter_ip, self.port))
-            logger.debug(
-                f"Gesendet: {len(packet)} Bytes an "
-                f"{self.inverter_ip}:{self.port}"
-            )
-
-            response, addr = sock.recvfrom(4096)
-            logger.debug(
-                f"Empfangen: {len(response)} Bytes von {addr}"
-            )
-            return response
-
-        except socket.timeout:
-            logger.warning(
-                f"Timeout beim Warten auf Antwort von "
-                f"{self.inverter_ip}:{self.port}"
-            )
-            return None
-        except OSError as e:
-            logger.error(f"Socket-Fehler: {e}")
-            return None
-        finally:
-            if timeout is not None:
-                sock.settimeout(old_timeout)
-
-    def close(self):
-        """Schließt den UDP-Socket."""
-        if self._sock:
-            self._sock.close()
-            self._sock = None
-
-    def __enter__(self):
+    async def __aenter__(self) -> "DanfossEtherLynx":
         return self
 
-    def __exit__(self, *args):
-        self.close()
-
-    def discover(self) -> str | None:
-        """Entdeckt den Inverter per Ping und gibt die Seriennummer zurück.
-
-        Sendet ein Full Broadcast Ping (Kapitel 5.4.1).
-        Der Inverter antwortet mit seiner Seriennummer.
-        """
-        logger.info(f"Sende Ping an {self.inverter_ip}:{self.port}...")
-
-        packet = build_ping_packet(self.master_serial)
-        response = self._send_receive(packet, timeout=DISCOVERY_TIMEOUT)
-
-        if response is None:
-            logger.error("Kein Inverter antwortet - ist er eingeschaltet und erreichbar?")
-            return None
-
-        serial = parse_ping_response(response)
-        if serial:
-            self._inverter_serial = serial
-            logger.info(f"Inverter gefunden! Seriennummer: {serial}")
-
-        return serial
+    async def __aexit__(self, *args: object) -> None:
+        await self.close()
 
     @property
     def inverter_serial(self) -> str | None:
@@ -1016,11 +963,34 @@ class DanfossEtherLynx:
         return self._inverter_serial
 
     @inverter_serial.setter
-    def inverter_serial(self, serial: str):
+    def inverter_serial(self, serial: str) -> None:
         """Setzt die Seriennummer manuell (falls Discovery übersprungen wird)."""
         self._inverter_serial = serial
 
-    def read_parameters(
+    async def discover(self) -> str | None:
+        """Entdeckt den Inverter per Ping und gibt die Seriennummer zurück.
+
+        Sendet ein Full Broadcast Ping (Kapitel 5.4.1).
+        Der Inverter antwortet mit seiner Seriennummer.
+        """
+        logger.info("Sende Ping an %s:%s...", self.inverter_ip, self.port)
+        packet = build_ping_packet(self.master_serial)
+        response = await self._send_receive_async(packet, timeout=DISCOVERY_TIMEOUT)
+
+        if response is None:
+            logger.error(
+                "Kein Inverter antwortet - ist er eingeschaltet und erreichbar?"
+            )
+            return None
+
+        serial = parse_ping_response(response)
+        if serial:
+            self._inverter_serial = serial
+            logger.info("Inverter gefunden! Seriennummer: %s", serial)
+
+        return serial
+
+    async def read_parameters(
         self,
         param_keys: list[str],
         max_per_request: int = 10,
@@ -1036,58 +1006,51 @@ class DanfossEtherLynx:
         """
         if not self._inverter_serial:
             logger.info("Keine Seriennummer bekannt, starte Discovery...")
-            if not self.discover():
+            if not await self.discover():
                 return {}
 
-        # Parameter-Definitionen sammeln
-        params = []
+        params: list[tuple[str, ParameterDef]] = []
         for key in param_keys:
             if key in TLX_PARAMETERS:
                 params.append((key, TLX_PARAMETERS[key]))
             else:
-                logger.warning(f"Unbekannter Parameter: {key}")
+                logger.warning("Unbekannter Parameter: %s", key)
 
-        all_results = {}
+        all_results: dict[str, Any] = {}
 
-        # In Batches aufteilen (EtherLynx unterstützt N Parameter pro Request)
         for batch_start in range(0, len(params), max_per_request):
-            batch = params[batch_start:batch_start + max_per_request]
+            batch = params[batch_start : batch_start + max_per_request]
 
             packet = build_get_parameters_packet(
                 source_serial=self.master_serial,
-                dest_serial=self._inverter_serial,
+                dest_serial=self._inverter_serial,  # type: ignore[arg-type]
                 parameters=[pdef for _, pdef in batch],
                 transaction_no=self._next_transaction(),
             )
 
-            response = self._send_receive(packet)
+            response = await self._send_receive_async(packet)
 
             if response is None:
                 logger.warning(
-                    f"Keine Antwort für Batch {batch_start}-"
-                    f"{batch_start + len(batch)}"
+                    "Keine Antwort für Batch %s-%s",
+                    batch_start,
+                    batch_start + len(batch),
                 )
                 continue
 
             results = parse_parameter_response(response, batch)
             all_results.update(results)
 
-            # Kurze Pause zwischen Batches
             if batch_start + max_per_request < len(params):
-                time.sleep(0.1)
+                await asyncio.sleep(0.1)
 
         return all_results
 
-    def read_all(self) -> dict[str, Any]:
-        """Liest alle definierten Parameter vom Inverter.
+    async def read_all(self) -> dict[str, Any]:
+        """Liest alle definierten Parameter vom Inverter."""
+        return await self.read_parameters(list(TLX_PARAMETERS.keys()))
 
-        Gibt ein Dict zurück mit allen Messwerten, Status- und
-        Systeminformationen. Ideal für die Anbindung an Home Assistant.
-        """
-        all_keys = list(TLX_PARAMETERS.keys())
-        return self.read_parameters(all_keys)
-
-    def read_realtime(self) -> dict[str, Any]:
+    async def read_realtime(self) -> dict[str, Any]:
         """Liest nur die häufig benötigten Echtzeit-Parameter.
 
         Optimiert für schnelle, häufige Abfragen (z.B. alle 10 Sekunden).
@@ -1110,9 +1073,9 @@ class DanfossEtherLynx:
             # Energie heute
             "grid_energy_today_total",
         ]
-        return self.read_parameters(realtime_keys)
+        return await self.read_parameters(realtime_keys)
 
-    def read_energy(self) -> dict[str, Any]:
+    async def read_energy(self) -> dict[str, Any]:
         """Liest Energie-/Produktionswerte (seltener abgefragt)."""
         energy_keys = [
             "total_energy", "energy_today",
@@ -1122,7 +1085,7 @@ class DanfossEtherLynx:
             "production_today_log", "production_this_week",
             "production_this_month", "production_this_year",
         ]
-        return self.read_parameters(energy_keys)
+        return await self.read_parameters(energy_keys)
 
     def get_status_text(self, mode_id: int) -> str:
         """Gibt den Betriebsmodus als Text zurück."""
@@ -1134,7 +1097,47 @@ class DanfossEtherLynx:
 # ============================================================================
 
 
-def main():
+async def _async_main(args: Any) -> int:
+    """Async-Hauptfunktion für das Kommandozeilen-Tool."""
+    async with DanfossEtherLynx(args.ip, timeout=args.timeout) as client:
+        # Seriennummer setzen oder Discovery
+        if args.serial:
+            client.inverter_serial = args.serial
+        else:
+            serial = await client.discover()
+            if not serial:
+                logger.error("Inverter nicht erreichbar. Beende.")
+                return 1
+
+        if args.mode == "discover":
+            # Nur Discovery
+            print(json.dumps({
+                "inverter_ip": args.ip,
+                "inverter_serial": client.inverter_serial,
+                "status": "online",
+            }, indent=2))
+            return 0
+
+        # Parameter lesen
+        if args.mode == "realtime":
+            data = await client.read_realtime()
+        elif args.mode == "energy":
+            data = await client.read_energy()
+        else:  # all / json
+            data = await client.read_all()
+
+        # Betriebsmodus-Text hinzufügen
+        if "operation_mode" in data:
+            data["operation_mode_text"] = client.get_status_text(
+                data["operation_mode"]
+            )
+
+        # JSON-Ausgabe
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+
+
+def main() -> int:
     """Kommandozeilen-Tool für schnelle Tests."""
     import argparse
 
@@ -1154,7 +1157,7 @@ def main():
     parser.add_argument(
         "--timeout", "-t",
         type=float, default=DEFAULT_TIMEOUT,
-        help=f"Timeout in Sekunden (default: {DEFAULT_TIMEOUT})"
+        help="Timeout in Sekunden (default: %(default)s)"
     )
     parser.add_argument(
         "--serial", "-s",
@@ -1175,44 +1178,7 @@ def main():
         format="%(asctime)s [%(levelname)s] %(message)s"
     )
 
-    with DanfossEtherLynx(args.ip, timeout=args.timeout) as client:
-        # Seriennummer setzen oder Discovery
-        if args.serial:
-            client.inverter_serial = args.serial
-        else:
-            serial = client.discover()
-            if not serial:
-                logger.error("Inverter nicht erreichbar. Beende.")
-                return 1
-
-        if args.mode == "discover":
-            # Nur Discovery
-            print(json.dumps({
-                "inverter_ip": args.ip,
-                "inverter_serial": client.inverter_serial,
-                "status": "online",
-            }, indent=2))
-            return 0
-
-        # Parameter lesen
-        if args.mode == "realtime":
-            data = client.read_realtime()
-        elif args.mode == "energy":
-            data = client.read_energy()
-        elif args.mode == "all":
-            data = client.read_all()
-        else:  # json
-            data = client.read_all()
-
-        # Betriebsmodus-Text hinzufügen
-        if "operation_mode" in data:
-            data["operation_mode_text"] = client.get_status_text(
-                data["operation_mode"]
-            )
-
-        # JSON-Ausgabe
-        print(json.dumps(data, indent=2, ensure_ascii=False))
-        return 0
+    return asyncio.run(_async_main(args))
 
 
 if __name__ == "__main__":

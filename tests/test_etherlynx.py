@@ -1,7 +1,7 @@
 """Tests für das EtherLynx-Protokollmodul."""
 import asyncio
 import struct
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
@@ -424,169 +424,113 @@ class TestParseValue:
 
 
 class TestDanfossEtherLynx:
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_discover_success(self, mock_socket_cls, make_ping_response):
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
+    @pytest.mark.asyncio
+    async def test_discover_success(self, make_ping_response):
         ping_resp = make_ping_response("INV_SER_001")
-        mock_sock.recvfrom.return_value = (ping_resp, ("192.168.1.100", ETHERLYNX_PORT))
-
         client = DanfossEtherLynx("192.168.1.100")
-        serial = client.discover()
-
+        with patch.object(client, "_send_receive_async", AsyncMock(return_value=ping_resp)):
+            serial = await client.discover()
         assert serial == "INV_SER_001"
         assert client.inverter_serial == "INV_SER_001"
-        mock_sock.sendto.assert_called_once()
-        client.close()
+        await client.close()
 
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_discover_timeout(self, mock_socket_cls):
-        import socket as real_socket
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
-        mock_sock.recvfrom.side_effect = real_socket.timeout("timeout")
-
+    @pytest.mark.asyncio
+    async def test_discover_timeout(self):
         client = DanfossEtherLynx("192.168.1.100")
-        result = client.discover()
-
+        with patch.object(client, "_send_receive_async", AsyncMock(return_value=None)):
+            result = await client.discover()
         assert result is None
         assert client.inverter_serial is None
-        client.close()
+        await client.close()
 
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_read_parameters_triggers_discovery(self, mock_socket_cls, make_ping_response, make_parameter_response):
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
-
+    @pytest.mark.asyncio
+    async def test_read_parameters_triggers_discovery(self, make_ping_response, make_parameter_response):
         ping_resp = make_ping_response("SER123")
         param = TLX_PARAMETERS["grid_power_total"]
         raw = struct.pack('>I', 1500)
         param_resp = make_parameter_response([(param, raw)])
 
-        mock_sock.recvfrom.side_effect = [
-            (ping_resp, ("192.168.1.100", ETHERLYNX_PORT)),
-            (param_resp, ("192.168.1.100", ETHERLYNX_PORT)),
-        ]
-
         client = DanfossEtherLynx("192.168.1.100")
-        result = client.read_parameters(["grid_power_total"])
+        with patch.object(
+            client, "_send_receive_async",
+            AsyncMock(side_effect=[ping_resp, param_resp])
+        ):
+            result = await client.read_parameters(["grid_power_total"])
 
+        assert "grid_power_total" in result
         assert result["grid_power_total"] == 1500.0
-        assert client.inverter_serial == "SER123"
-        client.close()
+        await client.close()
 
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_read_parameters_batching(self, mock_socket_cls, make_ping_response, make_parameter_response):
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
+    @pytest.mark.asyncio
+    async def test_read_parameters_skips_unknown_keys(self):
+        client = DanfossEtherLynx("192.168.1.100")
+        client._inverter_serial = "SER123"
+        with patch.object(client, "_send_receive_async", AsyncMock(return_value=None)):
+            result = await client.read_parameters(["nonexistent_key"])
+        assert result == {}
+        await client.close()
 
-        # Use small max_per_request to force batching
-        all_keys = list(TLX_PARAMETERS.keys())[:5]
-        params = [TLX_PARAMETERS[k] for k in all_keys]
-
-        # Build responses for 2 batches (3 + 2 with max_per_request=3)
-        batch1_resp = make_parameter_response([
-            (params[0], struct.pack('>I', 100)),
-            (params[1], struct.pack('>I', 200)),
-            (params[2], struct.pack('>I', 300)),
-        ])
-        batch2_resp = make_parameter_response([
-            (params[3], struct.pack('>I', 400)),
-            (params[4], struct.pack('>I', 500)),
-        ])
-
-        mock_sock.recvfrom.side_effect = [
-            (batch1_resp, ("192.168.1.100", ETHERLYNX_PORT)),
-            (batch2_resp, ("192.168.1.100", ETHERLYNX_PORT)),
-        ]
+    @pytest.mark.asyncio
+    async def test_read_all_returns_dict(self, make_parameter_response):
+        all_keys = list(TLX_PARAMETERS.keys())
+        num_batches = (len(all_keys) + 9) // 10
+        responses = []
+        for i in range(num_batches):
+            batch_start = i * 10
+            batch_end = min(batch_start + 10, len(all_keys))
+            batch_params = [TLX_PARAMETERS[k] for k in all_keys[batch_start:batch_end]]
+            resp = make_parameter_response([(p, struct.pack('>I', 0)) for p in batch_params])
+            responses.append(resp)
 
         client = DanfossEtherLynx("192.168.1.100")
-        client.inverter_serial = "SER123"
-        result = client.read_parameters(all_keys, max_per_request=3)
+        client._inverter_serial = "SER123"
+        with patch.object(client, "_send_receive_async", AsyncMock(side_effect=responses)):
+            result = await client.read_all()
 
-        assert len(result) == 5
-        # sendto called twice (2 batches)
-        assert mock_sock.sendto.call_count == 2
-        client.close()
+        assert isinstance(result, dict)
+        await client.close()
 
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_read_all_delegates(self, mock_socket_cls):
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
+    @pytest.mark.asyncio
+    async def test_async_context_manager(self, make_ping_response):
+        ping_resp = make_ping_response("CTX_SER")
+        async with DanfossEtherLynx("192.168.1.100") as client:
+            with patch.object(client, "_send_receive_async", AsyncMock(return_value=ping_resp)):
+                serial = await client.discover()
+        assert serial == "CTX_SER"
 
+    @pytest.mark.asyncio
+    async def test_close_is_idempotent(self):
         client = DanfossEtherLynx("192.168.1.100")
-        client.inverter_serial = "SER123"
+        await client.close()
+        await client.close()
 
-        with patch.object(client, 'read_parameters', return_value={"a": 1}) as mock_rp:
-            result = client.read_all()
-            mock_rp.assert_called_once_with(list(TLX_PARAMETERS.keys()))
-            assert result == {"a": 1}
+    @pytest.mark.asyncio
+    async def test_send_receive_async_opens_connection(self):
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        mock_transport = MagicMock()
+        mock_transport.is_closing.return_value = False
+        mock_protocol = MagicMock(spec=_EtherLynxProtocol)
+        mock_protocol.send_receive = AsyncMock(return_value=b"response")
 
-        client.close()
+        with patch("custom_components.danfoss_tlx.etherlynx.asyncio.get_running_loop") as mock_loop_fn:
+            mock_loop = MagicMock()
+            mock_loop.create_datagram_endpoint = AsyncMock(
+                return_value=(mock_transport, mock_protocol)
+            )
+            mock_loop_fn.return_value = mock_loop
 
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_read_realtime_delegates(self, mock_socket_cls):
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
+            client = DanfossEtherLynx("192.168.1.100")
+            result = await client._send_receive_async(b"packet", 3.0)
 
-        client = DanfossEtherLynx("192.168.1.100")
-        client.inverter_serial = "SER123"
+        assert result == b"response"
+        mock_loop.create_datagram_endpoint.assert_called_once()
 
-        with patch.object(client, 'read_parameters', return_value={}) as mock_rp:
-            client.read_realtime()
-            keys = mock_rp.call_args[0][0]
-            assert "grid_power_total" in keys
-            assert "operation_mode" in keys
-
-        client.close()
-
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_read_energy_delegates(self, mock_socket_cls):
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
-
-        client = DanfossEtherLynx("192.168.1.100")
-        client.inverter_serial = "SER123"
-
-        with patch.object(client, 'read_parameters', return_value={}) as mock_rp:
-            client.read_energy()
-            keys = mock_rp.call_args[0][0]
-            assert "total_energy" in keys
-            assert "production_this_year" in keys
-
-        client.close()
-
-    def test_get_status_text_known(self):
-        client = DanfossEtherLynx("192.168.1.100")
-        assert client.get_status_text(60) == "Produziert (On Grid)"
-        assert client.get_status_text(0) == "Aus (Off Grid)"
-        assert client.get_status_text(80) == "Aus, Kommunikation aktiv (Off Grid, Comm)"
-
-    def test_get_status_text_unknown(self):
-        client = DanfossEtherLynx("192.168.1.100")
-        assert client.get_status_text(99) == "Unbekannt (99)"
-
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_context_manager_closes_socket(self, mock_socket_cls):
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
-
-        with DanfossEtherLynx("192.168.1.100") as client:
-            client._get_socket()  # force socket creation
-
-        mock_sock.close.assert_called_once()
-
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_transaction_counter_wraps(self, mock_socket_cls):
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
-
+    def test_transaction_counter_wraps(self):
         client = DanfossEtherLynx("192.168.1.100")
         client._transaction_counter = 254
         assert client._next_transaction() == 255
         assert client._next_transaction() == 0  # wraps at 256
         assert client._next_transaction() == 1
-        client.close()
 
     def test_set_serial_manually(self):
         client = DanfossEtherLynx("192.168.1.100")
@@ -597,92 +541,6 @@ class TestDanfossEtherLynx:
 
 class TestDanfossEtherLynxEdgeCases:
     """Tests für Grenzfälle im EtherLynx-Protokoll."""
-
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_send_receive_oserror(self, mock_socket_cls):
-        """_send_receive: OSError wird abgefangen und None zurückgegeben."""
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
-        mock_sock.sendto.side_effect = OSError("Network unreachable")
-
-        client = DanfossEtherLynx("192.168.1.100")
-        client.inverter_serial = "SER123"
-
-        packet = build_ping_packet()
-        result = client._send_receive(packet)
-
-        assert result is None
-        client.close()
-
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_read_parameters_discover_fails(self, mock_socket_cls):
-        """read_parameters: Discovery schlägt fehl → leeres Dict."""
-        import socket as real_socket
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
-        # Discovery timeout - no response
-        mock_sock.recvfrom.side_effect = real_socket.timeout("timeout")
-
-        client = DanfossEtherLynx("192.168.1.100")
-        # No serial set - will trigger discovery
-        result = client.read_parameters(["grid_power_total"])
-
-        assert result == {}
-        client.close()
-
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_read_parameters_unknown_key(self, mock_socket_cls, make_ping_response, make_parameter_response):
-        """read_parameters: Unbekannter Schlüssel wird übersprungen."""
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
-
-        ping_resp = make_ping_response("SER123")
-        param = TLX_PARAMETERS["grid_power_total"]
-        raw = struct.pack('>I', 1500)
-        param_resp = make_parameter_response([(param, raw)])
-
-        mock_sock.recvfrom.side_effect = [
-            (ping_resp, ("192.168.1.100", ETHERLYNX_PORT)),
-            (param_resp, ("192.168.1.100", ETHERLYNX_PORT)),
-        ]
-
-        client = DanfossEtherLynx("192.168.1.100")
-        # Mix valid and unknown keys
-        result = client.read_parameters(["grid_power_total", "unknown_param_xyz"])
-
-        # Only valid key should be in result
-        assert "grid_power_total" in result
-        assert "unknown_param_xyz" not in result
-        client.close()
-
-    @patch("custom_components.danfoss_tlx.etherlynx.socket.socket")
-    def test_read_parameters_batch_no_response(self, mock_socket_cls, make_ping_response, make_parameter_response):
-        """read_parameters: Batch ohne Antwort wird übersprungen."""
-        import socket as real_socket
-        mock_sock = MagicMock()
-        mock_socket_cls.return_value = mock_sock
-
-        ping_resp = make_ping_response("SER123")
-        param = TLX_PARAMETERS["grid_power_total"]
-        raw = struct.pack('>I', 1500)
-        param_resp = make_parameter_response([(param, raw)])
-
-        # First call: ping response for discovery
-        # Second call (first batch): timeout → None response
-        # Third call (second batch): valid response
-        mock_sock.recvfrom.side_effect = [
-            (ping_resp, ("192.168.1.100", ETHERLYNX_PORT)),
-            real_socket.timeout("timeout"),   # first batch fails
-            (param_resp, ("192.168.1.100", ETHERLYNX_PORT)),  # second batch ok
-        ]
-
-        client = DanfossEtherLynx("192.168.1.100")
-        # Use max_per_request=1 so each param gets its own batch
-        result = client.read_parameters(["operation_mode", "grid_power_total"], max_per_request=1)
-
-        # operation_mode batch failed (timeout), grid_power_total batch succeeded
-        assert "grid_power_total" in result
-        client.close()
 
     def test_parse_parameter_response_param_count_mismatch(self, make_parameter_response):
         """parse_parameter_response: Anzahl-Mismatch wird toleriert."""

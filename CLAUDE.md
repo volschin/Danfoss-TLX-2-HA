@@ -12,7 +12,7 @@ This document describes the codebase structure, conventions, and development wor
 **Language**: Python 3.11+
 **Documentation language**: German (comments, README, docstrings)
 **HACS**: Yes — install via Home Assistant Community Store
-**Quality Scale**: Gold
+**Quality Scale**: Platinum
 
 ---
 
@@ -35,6 +35,7 @@ Danfoss-TLX-2-HA/
 │       ├── icons.json               # MDI icon translations for all sensor entities
 │       ├── quality_scale.yaml       # HA Quality Scale Gold declaration
 │       ├── etherlynx.py             # EtherLynx protocol library (copied from root)
+│       ├── py.typed                 # PEP 561 type marker (Platinum requirement)
 │       ├── brand/
 │       │   ├── icon.png             # HACS brand icon (256×256)
 │       │   └── logo.png             # HACS brand logo (256×256)
@@ -92,7 +93,7 @@ All shared constants: `DOMAIN = "danfoss_tlx"`, `CONF_*` config keys, default va
 - `DanfossOptionsFlow` — edit poll interval and PV string count post-setup
 
 #### `coordinator.py`
-`DanfossCoordinator(DataUpdateCoordinator)` — polls the inverter on a configurable interval. Runs `DanfossEtherLynx.read_all()` in an executor thread. Handles auto-discovery of serial on first connect, resets the client on consecutive failures so the next poll retriggers discovery. Logs WARNING on first failure and INFO on recovery (log-when-unavailable). Uses `HomeAssistantError` with translation keys for all exceptions.
+`DanfossCoordinator(DataUpdateCoordinator)` — polls the inverter on a configurable interval. Calls `DanfossEtherLynx.read_all()` natively async (no executor thread). Handles auto-discovery of serial on first connect, resets the client on consecutive failures so the next poll retriggers discovery. Logs WARNING on first failure and INFO on recovery (log-when-unavailable). Uses `HomeAssistantError` with translation keys for setup exceptions; `UpdateFailed` with a plain string for poll errors.
 
 #### `sensor.py`
 - `DanfossSensor` — one per entry in `TLX_PARAMETERS`; omits PV string 3 sensors when `pv_strings == 2`
@@ -105,7 +106,7 @@ All shared constants: `DOMAIN = "danfoss_tlx"`, `CONF_*` config keys, default va
 Diagnostics platform for the Gold quality scale. Returns config data (serial redacted), coordinator state, and latest inverter readings via `async_get_config_entry_diagnostics`.
 
 #### `quality_scale.yaml`
-Declares compliance with all Bronze, Silver, and Gold quality scale rules. Rules that don't apply (discovery, reauthentication, actions, stale-devices) are marked as `exempt` with German comments.
+Declares compliance with all Bronze, Silver, Gold, and Platinum quality scale rules. Rules that don't apply (discovery, reauthentication, actions, stale-devices, inject-websession) are marked as `exempt` with German comments.
 
 #### `etherlynx.py`
 Verbatim copy of `danfoss_etherlynx.py` kept inside the component package so HACS installs a self-contained directory. Any changes to the protocol library must be mirrored in both files.
@@ -127,7 +128,8 @@ The low-level protocol library. Everything needed to speak EtherLynx lives here.
 - `DataType` enum — 12 numeric data type variants (BOOLEAN, SIGNED32, UNSIGNED32, FLOAT, etc.)
 - `ParameterDef` dataclass — Descriptor for each inverter parameter: Danfoss parameter ID, unit, scale factor, HA `device_class`
 - `TLX_PARAMETERS` dict — Registry of ~40 readable inverter parameters keyed by a snake_case name (e.g. `grid_power_total`, `pv_voltage_1`)
-- `DanfossEtherLynx` class — Main client; wraps a UDP socket, implements `ping()`, `get_parameters()`, `get_text()`, `discover_serial()`
+- `_EtherLynxProtocol` class — asyncio `DatagramProtocol` for non-blocking UDP communication; matches requests to responses via a `Future`
+- `DanfossEtherLynx` class — Async main client; uses `_EtherLynxProtocol` via `create_datagram_endpoint`; all public methods are `async def`
 - Module-level helpers: `build_ping_packet()`, `build_get_parameters_packet()`, `parse_ping_response()`, `parse_parameter_response()`
 
 **Protocol notes:**
@@ -337,7 +339,7 @@ When adding new parameters, follow this pattern exactly and include the Danfoss 
 
 ## Testing
 
-The project has a pytest-based test suite with ~152 tests and 97% code coverage.
+The project has a pytest-based test suite with ~165 tests and 95% code coverage.
 
 ### Running tests
 ```bash
@@ -348,7 +350,7 @@ pytest --cov=custom_components.danfoss_tlx --cov-report=term-missing
 ```
 
 ### Test structure
-- **`tests/conftest.py`** — Shared fixtures: `mock_hass`, `mock_config_entry`, `sample_inverter_data`, `make_ping_response`, `make_parameter_response`
+- **`tests/conftest.py`** — Shared fixtures: `mock_hass`, `mock_config_entry`, `sample_inverter_data`, `make_ping_response`, `make_parameter_response`, `_make_mock_client` (async context manager helper)
 - **`tests/test_etherlynx.py`** — Protocol library: packet building/parsing, socket mocking, registry validation
 - **`tests/test_coordinator.py`** — DataUpdateCoordinator: discovery, serial handling, error recovery
 - **`tests/test_sensor.py`** — Sensor entities: value mapping, PV string filtering, device info

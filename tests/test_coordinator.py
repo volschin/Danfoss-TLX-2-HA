@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
 
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.danfoss_tlx.const import (
     CONF_INVERTER_SERIAL,
@@ -94,6 +95,24 @@ class TestDanfossCoordinator:
 
     @pytest.mark.asyncio
     @patch("custom_components.danfoss_tlx.coordinator.DanfossEtherLynx")
+    async def test_fetch_data_resets_on_read_all_exception(self, mock_cls, mock_hass, mock_config_entry):
+        """Client wird bei unerwarteter Exception in read_all geschlossen und zurückgesetzt."""
+        mock_client = MagicMock()
+        mock_cls.return_value = mock_client
+        mock_client.read_all = AsyncMock(side_effect=OSError("Netzwerkfehler"))
+        mock_client.close = AsyncMock()
+        mock_client.inverter_serial = "TLX123456"
+
+        coordinator = _make_coordinator(mock_hass, mock_config_entry)
+
+        with pytest.raises(OSError):
+            await coordinator._fetch_data()
+
+        mock_client.close.assert_called_once()
+        assert coordinator._client is None
+
+    @pytest.mark.asyncio
+    @patch("custom_components.danfoss_tlx.coordinator.DanfossEtherLynx")
     async def test_fetch_data_raises_on_failed_discovery(self, mock_cls, mock_hass, mock_config_entry):
         mock_config_entry.data[CONF_INVERTER_SERIAL] = ""
         mock_client = MagicMock()
@@ -107,6 +126,20 @@ class TestDanfossCoordinator:
             await coordinator._fetch_data()
 
     @pytest.mark.asyncio
+    async def test_homeassistant_error_propagates_unchanged(self, mock_hass, mock_config_entry):
+        """HomeAssistantError aus _fetch_data wird unverändert weitergegeben."""
+        coordinator = _make_coordinator(mock_hass, mock_config_entry)
+        coordinator.last_update_success = True
+
+        ha_error = HomeAssistantError(translation_domain="danfoss_tlx", translation_key="inverter_unreachable")
+        with patch.object(
+            coordinator, "_fetch_data", AsyncMock(side_effect=ha_error)
+        ):
+            with pytest.raises(HomeAssistantError) as exc_info:
+                await coordinator._async_update_data()
+            assert exc_info.value is ha_error
+
+    @pytest.mark.asyncio
     async def test_warning_logged_on_first_failure(self, mock_hass, mock_config_entry):
         """WARNING wird beim ersten Fehler geloggt."""
         coordinator = _make_coordinator(mock_hass, mock_config_entry)
@@ -116,7 +149,7 @@ class TestDanfossCoordinator:
             coordinator, "_fetch_data", AsyncMock(side_effect=Exception("Timeout"))
         ):
             with patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
-                with pytest.raises(Exception):
+                with pytest.raises(UpdateFailed):
                     await coordinator._async_update_data()
                 mock_logger.warning.assert_called_once()
                 assert "192.168.1.100" in mock_logger.warning.call_args[0][1]
@@ -131,7 +164,7 @@ class TestDanfossCoordinator:
             coordinator, "_fetch_data", AsyncMock(side_effect=Exception("Timeout"))
         ):
             with patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
-                with pytest.raises(Exception):
+                with pytest.raises(UpdateFailed):
                     await coordinator._async_update_data()
                 mock_logger.warning.assert_not_called()
 

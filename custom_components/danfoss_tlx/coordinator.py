@@ -52,6 +52,8 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Holt Daten vom Inverter."""
         try:
             data = await self._fetch_data()
+        except HomeAssistantError:
+            raise
         except Exception as err:
             if self.last_update_success:
                 _LOGGER.warning(
@@ -84,9 +86,13 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         translation_placeholders={"ip": self._ip},
                     )
 
-        self._inverter_serial = self._client.inverter_serial
-
-        data = await self._client.read_all()
+        try:
+            self._inverter_serial = self._client.inverter_serial
+            data = await self._client.read_all()
+        except Exception:
+            await self._client.close()
+            self._client = None
+            raise
         if not data:
             await self._client.close()
             self._client = None
@@ -94,5 +100,4 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 translation_domain=DOMAIN,
                 translation_key="no_data_received",
             )
-
         return data

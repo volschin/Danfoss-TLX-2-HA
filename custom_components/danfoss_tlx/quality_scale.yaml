@@ -78,3 +78,12 @@ rules:
   stale-devices:
     status: exempt
     comment: Ein Gerät pro Config Entry, wird bei Unload entfernt.
+
+  # Platinum
+  async-dependency: done
+  inject-websession:
+    status: exempt
+    comment: >
+      Die Integration kommuniziert ausschließlich über UDP (EtherLynx-Protokoll),
+      keine HTTP-Anfragen. Websession ist nicht anwendbar.
+  strict-typing: done

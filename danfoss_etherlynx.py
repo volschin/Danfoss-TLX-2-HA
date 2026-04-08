@@ -927,7 +927,8 @@ class DanfossEtherLynx:
                 _EtherLynxProtocol,
                 remote_addr=(self.inverter_ip, self.port),
             )
-        assert self._protocol is not None
+        if self._protocol is None:
+            raise RuntimeError("_protocol ist None nach create_datagram_endpoint")
         return self._protocol
 
     async def _send_receive_async(
@@ -937,7 +938,9 @@ class DanfossEtherLynx:
     ) -> bytes | None:
         """Sendet UDP-Paket und wartet auf Antwort."""
         protocol = await self._get_connection()
-        return await protocol.send_receive(packet, timeout=timeout or self.timeout)
+        return await protocol.send_receive(
+            packet, timeout=self.timeout if timeout is None else timeout
+        )
 
     def _next_transaction(self) -> int:
         """Inkrementiert und gibt die nächste Transaktionsnummer zurück."""

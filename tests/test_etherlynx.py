@@ -525,6 +525,62 @@ class TestDanfossEtherLynx:
         assert result == b"response"
         mock_loop.create_datagram_endpoint.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_read_parameters_batch_no_response(self, make_ping_response):
+        """Batch ohne Antwort wird übersprungen, kein Fehler."""
+        make_ping_response("SER123")
+        client = DanfossEtherLynx("192.168.1.100")
+        client._inverter_serial = "SER123"
+        with patch.object(
+            client, "_send_receive_async",
+            AsyncMock(return_value=None)
+        ):
+            result = await client.read_parameters(["grid_power_total"])
+        assert result == {}
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_read_realtime_returns_subset(self, make_parameter_response):
+        """read_realtime gibt nur Echtzeit-Parameter zurück."""
+        from custom_components.danfoss_tlx.etherlynx import TLX_PARAMETERS
+        all_keys = list(TLX_PARAMETERS.keys())
+        num_batches = (len(all_keys) + 9) // 10
+        responses = []
+        for i in range(num_batches):
+            batch_start = i * 10
+            batch_end = min(batch_start + 10, len(all_keys))
+            batch_params = [TLX_PARAMETERS[k] for k in all_keys[batch_start:batch_end]]
+            resp = make_parameter_response([(p, struct.pack('>I', 100)) for p in batch_params])
+            responses.append(resp)
+
+        client = DanfossEtherLynx("192.168.1.100")
+        client._inverter_serial = "SER123"
+        with patch.object(client, "_send_receive_async", AsyncMock(side_effect=responses * 2)):
+            result = await client.read_realtime()
+        assert isinstance(result, dict)
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_read_energy_returns_subset(self, make_parameter_response):
+        """read_energy gibt Energie-Parameter zurück."""
+        from custom_components.danfoss_tlx.etherlynx import TLX_PARAMETERS
+        all_keys = list(TLX_PARAMETERS.keys())
+        num_batches = (len(all_keys) + 9) // 10
+        responses = []
+        for i in range(num_batches):
+            batch_start = i * 10
+            batch_end = min(batch_start + 10, len(all_keys))
+            batch_params = [TLX_PARAMETERS[k] for k in all_keys[batch_start:batch_end]]
+            resp = make_parameter_response([(p, struct.pack('>I', 100)) for p in batch_params])
+            responses.append(resp)
+
+        client = DanfossEtherLynx("192.168.1.100")
+        client._inverter_serial = "SER123"
+        with patch.object(client, "_send_receive_async", AsyncMock(side_effect=responses * 2)):
+            result = await client.read_energy()
+        assert isinstance(result, dict)
+        await client.close()
+
     def test_transaction_counter_wraps(self):
         client = DanfossEtherLynx("192.168.1.100")
         client._transaction_counter = 254
@@ -537,6 +593,179 @@ class TestDanfossEtherLynx:
         assert client.inverter_serial is None
         client.inverter_serial = "MANUAL_SER"
         assert client.inverter_serial == "MANUAL_SER"
+
+    @pytest.mark.asyncio
+    async def test_close_releases_transport(self):
+        """close() schließt den Transport und setzt Attribute zurück."""
+        client = DanfossEtherLynx("192.168.1.100")
+        mock_transport = MagicMock()
+        client._transport = mock_transport
+        client._protocol = MagicMock()
+        await client.close()
+        mock_transport.close.assert_called_once()
+        assert client._transport is None
+        assert client._protocol is None
+
+    @pytest.mark.asyncio
+    async def test_get_connection_raises_when_protocol_none(self):
+        """_get_connection löst RuntimeError aus wenn _protocol None ist nach create_datagram_endpoint."""
+        client = DanfossEtherLynx("192.168.1.100")
+
+        async def fake_create_endpoint(factory, remote_addr):
+            return (MagicMock(), None)
+
+        mock_loop = MagicMock()
+        mock_loop.create_datagram_endpoint = AsyncMock(side_effect=fake_create_endpoint)
+        with patch("asyncio.get_running_loop", return_value=mock_loop):
+            with pytest.raises(RuntimeError, match="_protocol ist None"):
+                await client._get_connection()
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_read_parameters_discover_fails(self):
+        """read_parameters gibt leeres Dict zurück wenn Discovery fehlschlägt."""
+        client = DanfossEtherLynx("192.168.1.100")
+        # No serial set, discover returns None
+        with patch.object(client, "discover", AsyncMock(return_value=None)):
+            result = await client.read_parameters(["grid_power_total"])
+        assert result == {}
+        await client.close()
+
+    def test_get_status_text(self):
+        """get_status_text gibt lesbaren Modustext zurück."""
+        client = DanfossEtherLynx("192.168.1.100")
+        text = client.get_status_text(0)
+        assert isinstance(text, str)
+        assert len(text) > 0
+
+
+class TestEtherLynxProtocol:
+    """Tests für _EtherLynxProtocol send_receive Grenzfälle."""
+
+    @pytest.mark.asyncio
+    async def test_send_receive_raises_when_transport_none(self):
+        """send_receive löst RuntimeError aus wenn transport None ist."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        # transport is None by default
+        with pytest.raises(RuntimeError, match="send_receive aufgerufen ohne aktive Verbindung"):
+            await protocol.send_receive(b"test", timeout=1.0)
+
+    def test_connection_made_sets_transport(self):
+        """connection_made setzt das Transport-Attribut."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        mock_transport = MagicMock()
+        protocol.connection_made(mock_transport)
+        assert protocol.transport is mock_transport
+
+    def test_datagram_received_sets_future_result(self):
+        """datagram_received setzt das Future-Ergebnis."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        loop = asyncio.new_event_loop()
+        try:
+            future = loop.create_future()
+            protocol._response_future = future
+            protocol.datagram_received(b"response_data", ("192.168.1.1", 48004))
+            assert future.result() == b"response_data"
+        finally:
+            loop.close()
+
+    def test_error_received_sets_future_exception(self):
+        """error_received setzt die Exception am Future."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        loop = asyncio.new_event_loop()
+        try:
+            future = loop.create_future()
+            protocol._response_future = future
+            exc = OSError("Network error")
+            protocol.error_received(exc)
+            with pytest.raises(OSError):
+                future.result()
+        finally:
+            loop.close()
+
+    @pytest.mark.asyncio
+    async def test_send_receive_returns_data(self):
+        """send_receive gibt Antwort-Daten zurück."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        mock_transport = MagicMock()
+        mock_transport.sendto = MagicMock()
+        protocol.transport = mock_transport
+
+        async def deliver_response():
+            await asyncio.sleep(0)  # yield to let send_receive run
+            if protocol._response_future and not protocol._response_future.done():
+                protocol._response_future.set_result(b"response")
+
+        asyncio.ensure_future(deliver_response())
+        result = await protocol.send_receive(b"request", timeout=1.0)
+        assert result == b"response"
+
+    @pytest.mark.asyncio
+    async def test_send_receive_oserror_returns_none(self):
+        """send_receive gibt None zurück bei OSError."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        mock_transport = MagicMock()
+        mock_transport.sendto = MagicMock()
+        protocol.transport = mock_transport
+
+        async def deliver_error():
+            await asyncio.sleep(0)
+            if protocol._response_future and not protocol._response_future.done():
+                protocol._response_future.set_exception(OSError("network error"))
+
+        asyncio.ensure_future(deliver_error())
+        result = await protocol.send_receive(b"request", timeout=1.0)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_send_receive_timeout_returns_none(self):
+        """send_receive gibt None zurück bei Timeout."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        mock_transport = MagicMock()
+        mock_transport.sendto = MagicMock()
+        protocol.transport = mock_transport
+        # No response delivered → timeout fires
+        result = await protocol.send_receive(b"request", timeout=0.01)
+        assert result is None
+
+
+class TestParseValueEdgeCases:
+    """Tests für Grenzfälle in _parse_value."""
+
+    def test_struct_error_returns_none(self):
+        """_parse_value gibt None zurück bei ungültiger Länge."""
+        from custom_components.danfoss_tlx.etherlynx import _parse_value
+        # Pass wrong-length bytes to trigger struct.error
+        result = _parse_value(b'\x00\x01', 0, int(DataType.FLOAT))  # too short for float
+        assert result is None
+
+
+class TestParseParameterResponseEdgeCases:
+    """Tests für Grenzfälle in parse_parameter_response."""
+
+    def test_payload_too_short_breaks_loop(self):
+        """parse_parameter_response stoppt wenn Payload zu kurz für nächsten Parameter."""
+        param = TLX_PARAMETERS["grid_power_total"]
+
+        # Build a fake response: 52 header bytes + payload
+        # Flags byte is at data[37] per parse_parameter_response code
+        # From Flag class: RESPONSE = 0x02
+        fake_header = bytearray(52)
+        fake_header[37] = Flag.RESPONSE  # set RESPONSE flag at correct offset
+        # Payload: num_params=1 (first byte) + 3 padding bytes, but NO 8-byte param entries
+        # offset=4, offset+8=12 > len(payload)=4 → triggers warning at line 760
+        payload = bytes([1]) + b'\x00' * 3
+        response = bytes(fake_header) + payload
+
+        result = parse_parameter_response(response, [("grid_power_total", param)])
+        assert result == {}
 
 
 class TestDanfossEtherLynxEdgeCases:

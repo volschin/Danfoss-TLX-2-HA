@@ -59,11 +59,7 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.warning(
                     "Inverter %s nicht mehr erreichbar: %s", self._ip, err
                 )
-            raise UpdateFailed(
-                translation_domain=DOMAIN,
-                translation_key="update_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+            raise UpdateFailed(f"Fehler beim Lesen der Inverterdaten: {err}") from err
 
         if not self.last_update_success:
             _LOGGER.info("Inverter %s wieder erreichbar", self._ip)

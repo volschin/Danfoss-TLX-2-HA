@@ -209,9 +209,9 @@ class TestDanfossConfigFlowErrors:
     async def test_user_generic_runtime_error(self, mock_hass):
         """User step: RuntimeError beim Verbinden zeigt cannot_connect."""
         with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
-            mock_cls.return_value.__aenter__ = AsyncMock(
-                side_effect=RuntimeError("some other error")
-            )
+            mock_client = _make_mock_client()
+            mock_client.__aenter__ = AsyncMock(side_effect=RuntimeError("some other error"))
+            mock_cls.return_value = mock_client
 
             flow = DanfossConfigFlow()
             flow.hass = mock_hass
@@ -230,9 +230,9 @@ class TestDanfossConfigFlowErrors:
     async def test_user_generic_exception(self, mock_hass):
         """User step: Unerwarteter Fehler zeigt cannot_connect."""
         with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
-            mock_cls.return_value.__aenter__ = AsyncMock(
-                side_effect=Exception("unexpected error")
-            )
+            mock_client = _make_mock_client()
+            mock_client.__aenter__ = AsyncMock(side_effect=Exception("unexpected error"))
+            mock_cls.return_value = mock_client
 
             flow = DanfossConfigFlow()
             flow.hass = mock_hass
@@ -251,9 +251,9 @@ class TestDanfossConfigFlowErrors:
     async def test_reconfigure_generic_runtime_error(self, mock_hass, mock_config_entry):
         """Reconfigure: RuntimeError beim Verbinden zeigt cannot_connect."""
         with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
-            mock_cls.return_value.__aenter__ = AsyncMock(
-                side_effect=RuntimeError("some other error")
-            )
+            mock_client = _make_mock_client()
+            mock_client.__aenter__ = AsyncMock(side_effect=RuntimeError("some other error"))
+            mock_cls.return_value = mock_client
 
             flow = DanfossConfigFlow()
             flow.hass = mock_hass
@@ -271,9 +271,9 @@ class TestDanfossConfigFlowErrors:
     async def test_reconfigure_generic_exception(self, mock_hass, mock_config_entry):
         """Reconfigure: Unerwarteter Fehler zeigt cannot_connect."""
         with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
-            mock_cls.return_value.__aenter__ = AsyncMock(
-                side_effect=Exception("unexpected error")
-            )
+            mock_client = _make_mock_client()
+            mock_client.__aenter__ = AsyncMock(side_effect=Exception("unexpected error"))
+            mock_cls.return_value = mock_client
 
             flow = DanfossConfigFlow()
             flow.hass = mock_hass

@@ -6,7 +6,6 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
 
 from custom_components.danfoss_tlx.etherlynx import (
-    ETHERLYNX_PORT,
     ETHERLYNX_HEADER_SIZE,
     ETHERLYNX_DATA_OFFSET,
     MessageID,
@@ -639,7 +638,7 @@ class TestDanfossEtherLynx:
         assert len(text) > 0
 
 
-class TestEtherLynxProtocol:
+class TestEtherLynxProtocolEdgeCases:
     """Tests für _EtherLynxProtocol send_receive Grenzfälle."""
 
     @pytest.mark.asyncio

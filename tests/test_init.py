@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
-from custom_components.danfoss_tlx import async_setup_entry, async_unload_entry, PLATFORMS
+from custom_components.danfoss_tlx import async_setup_entry, async_unload_entry, PLATFORMS, _async_reload_entry
 
 
 class TestIntegrationSetup:
@@ -49,3 +49,14 @@ class TestIntegrationSetup:
         mock_config_entry.async_on_unload.assert_called_once()
         # The unload callback came from add_update_listener
         mock_config_entry.add_update_listener.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_async_reload_entry(self, mock_hass, mock_config_entry):
+        """_async_reload_entry ruft async_reload mit entry_id auf."""
+        mock_hass.config_entries.async_reload = AsyncMock()
+
+        await _async_reload_entry(mock_hass, mock_config_entry)
+
+        mock_hass.config_entries.async_reload.assert_awaited_once_with(
+            mock_config_entry.entry_id
+        )

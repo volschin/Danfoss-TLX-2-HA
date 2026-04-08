@@ -32,10 +32,6 @@ from .etherlynx import DanfossEtherLynx
 _LOGGER = logging.getLogger(__name__)
 
 
-class ParameterReadError(RuntimeError):
-    """Inverter erreichbar, aber Parameter-Lesen fehlgeschlagen."""
-
-
 class DanfossConfigFlow(ConfigFlow, domain=DOMAIN):
     """Config Flow für Danfoss TLX Pro."""
 
@@ -131,45 +127,28 @@ class DanfossConfigFlow(ConfigFlow, domain=DOMAIN):
         """Führt Verbindungsversuch durch und gibt (serial, errors) zurück."""
         errors: dict[str, str] = {}
         try:
-            discovered = await self.hass.async_add_executor_job(
-                self._try_connect, ip, serial
-            )
-            if discovered:
-                serial = discovered
-            elif not serial:
-                errors["base"] = "cannot_connect"
-        except ParameterReadError:
-            _LOGGER.warning(
-                "Inverter %s erreichbar, aber Parameter-Lesen fehlgeschlagen", ip
-            )
-            errors["base"] = "cannot_read_parameters"
+            async with DanfossEtherLynx(ip) as client:
+                if serial:
+                    client.inverter_serial = serial
+                else:
+                    discovered = await client.discover()
+                    if not discovered:
+                        errors["base"] = "cannot_connect"
+                        return serial, errors
+                    serial = discovered
+
+                test_data = await client.read_parameters(
+                    ["grid_power_total", "operation_mode", "nominal_power"]
+                )
+                if not test_data:
+                    errors["base"] = "cannot_read_parameters"
+                    _LOGGER.warning(
+                        "Inverter %s erreichbar, aber Parameter-Lesen fehlgeschlagen", ip
+                    )
         except Exception:
             _LOGGER.exception("Verbindungsfehler zu %s", ip)
             errors["base"] = "cannot_connect"
         return serial, errors
-
-    @staticmethod
-    def _try_connect(ip: str, serial: str) -> str | None:
-        """Versucht den Inverter zu erreichen und gibt die Seriennummer zurück.
-
-        Wirft ParameterReadError wenn Discovery klappt aber Parameter-Lesen
-        fehlschlägt.
-        """
-        with DanfossEtherLynx(ip) as client:
-            if serial:
-                client.inverter_serial = serial
-            else:
-                serial = client.discover()
-                if not serial:
-                    return None
-
-            test_data = client.read_parameters(
-                ["grid_power_total", "operation_mode", "nominal_power"]
-            )
-            if not test_data:
-                raise ParameterReadError
-
-            return serial
 
     @staticmethod
     @callback

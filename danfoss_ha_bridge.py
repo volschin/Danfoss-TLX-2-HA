@@ -20,6 +20,7 @@ Voraussetzungen:
 - Netzwerkzugriff auf den Inverter (UDP Port 48004)
 “””
 
+import asyncio
 import json
 import logging
 import signal
@@ -249,7 +250,7 @@ client = DanfossEtherLynx(config.inverter_ip)
 if config.inverter_serial:
     client.inverter_serial = config.inverter_serial
 else:
-    serial = client.discover()
+    serial = asyncio.run(client.discover())
     if not serial:
         logger.error(
             "Inverter nicht gefunden. Prüfen Sie:\n"
@@ -287,11 +288,11 @@ logger.info(
 
 while running:
     now = time.time()
-    
+
     try:
         # Realtime-Daten (häufig)
         if now - last_realtime >= config.poll_interval_realtime:
-            data = client.read_realtime()
+            data = asyncio.run(client.read_realtime())
             if data:
                 # Betriebsmodus-Text hinzufügen
                 if "operation_mode" in data:
@@ -307,24 +308,24 @@ while running:
                     f"Keine Realtime-Daten "
                     f"({consecutive_errors}/{MAX_ERRORS})"
                 )
-        
+
         # Energie-Daten (selten)
         if now - last_energy >= config.poll_interval_energy:
-            data = client.read_energy()
+            data = asyncio.run(client.read_energy())
             if data:
                 publish_values(mqtt_client, config, data)
                 last_energy = now
-        
+
         # System-Daten (sehr selten)
         if now - last_system >= config.poll_interval_system:
             system_keys = [
                 "nominal_power", "sw_version", "hardware_type"
             ]
-            data = client.read_parameters(system_keys)
+            data = asyncio.run(client.read_parameters(system_keys))
             if data:
                 publish_values(mqtt_client, config, data)
                 last_system = now
-        
+
         # Zu viele aufeinanderfolgende Fehler → Inverter offline
         if consecutive_errors >= MAX_ERRORS:
             mqtt_client.publish(
@@ -338,17 +339,17 @@ while running:
             time.sleep(60)
             consecutive_errors = 0
             # Neuen Discovery-Versuch
-            client.discover()
+            asyncio.run(client.discover())
             if client.inverter_serial:
                 mqtt_client.publish(
                     f"{config.mqtt_topic_prefix}/status",
                     "online", retain=True
                 )
-        
+
     except Exception as e:
         logger.error(f"Fehler in der Hauptschleife: {e}", exc_info=True)
         consecutive_errors += 1
-    
+
     # Kurz schlafen
     time.sleep(1)
 
@@ -358,7 +359,7 @@ mqtt_client.publish(
 )
 mqtt_client.loop_stop()
 mqtt_client.disconnect()
-client.close()
+asyncio.run(client.close())
 logger.info("Beendet.")
 ```
 
@@ -369,40 +370,45 @@ logger.info("Beendet.")
 # ============================================================================
 
 def run_json_mode(config: BridgeConfig, mode: str = “all”):
-“”“Einmalige Abfrage, Ausgabe als JSON auf stdout.
+“””Einmalige Abfrage, Ausgabe als JSON auf stdout.
 
 ```
 Ideal für Home Assistant command_line Sensor-Integration.
-"""
-with DanfossEtherLynx(config.inverter_ip) as client:
-    if config.inverter_serial:
-        client.inverter_serial = config.inverter_serial
-    else:
-        serial = client.discover()
-        if not serial:
-            # Offline - leeres Ergebnis
-            print(json.dumps({"status": "offline"}))
-            return 1
-    
-    if mode == "realtime":
-        data = client.read_realtime()
-    elif mode == "energy":
-        data = client.read_energy()
-    else:
-        data = client.read_all()
-    
-    if data:
-        data["status"] = "online"
-        data["inverter_serial"] = client.inverter_serial
-        if "operation_mode" in data:
-            data["operation_mode_text"] = client.get_status_text(
-                data["operation_mode"]
-            )
-    else:
-        data = {"status": "offline"}
-    
-    print(json.dumps(data, ensure_ascii=False))
-    return 0
+“””
+return asyncio.run(_async_run_json_mode(config, mode))
+
+
+async def _async_run_json_mode(config: BridgeConfig, mode: str = “all”) -> int:
+    “””Asynchrone Implementierung für run_json_mode.”””
+    async with DanfossEtherLynx(config.inverter_ip) as client:
+        if config.inverter_serial:
+            client.inverter_serial = config.inverter_serial
+        else:
+            serial = await client.discover()
+            if not serial:
+                # Offline - leeres Ergebnis
+                print(json.dumps({“status”: “offline”}))
+                return 1
+
+        if mode == “realtime”:
+            data = await client.read_realtime()
+        elif mode == “energy”:
+            data = await client.read_energy()
+        else:
+            data = await client.read_all()
+
+        if data:
+            data[“status”] = “online”
+            data[“inverter_serial”] = client.inverter_serial
+            if “operation_mode” in data:
+                data[“operation_mode_text”] = client.get_status_text(
+                    data[“operation_mode”]
+                )
+        else:
+            data = {“status”: “offline”}
+
+        print(json.dumps(data, ensure_ascii=False))
+        return 0
 ```
 
 # ============================================================================

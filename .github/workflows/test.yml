@@ -26,9 +26,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-asyncio pytest-cov ruff homeassistant voluptuous
 
-      - name: Verify etherlynx copies are identical
-        run: diff custom_components/danfoss_tlx/etherlynx.py danfoss_etherlynx.py
-
       - name: Compile check
         run: |
           python -m py_compile custom_components/danfoss_tlx/etherlynx.py

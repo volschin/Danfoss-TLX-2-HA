@@ -58,7 +58,6 @@ Danfoss-TLX-2-HA/
 │       ├── hacs.yml                 # HACS Validation
 │       ├── hassfest.yml             # Hassfest Validation
 │       └── release.yml              # Release Drafter (auto-drafts releases from PRs)
-├── danfoss_etherlynx.py             # Standalone protocol library (also used as etherlynx.py)
 ├── README.md                        # User documentation (German)
 ├── CLAUDE.md                        # This file
 ├── LICENSE                          # MIT License
@@ -104,18 +103,7 @@ Diagnostics platform for the Gold quality scale. Returns config data (serial red
 Declares compliance with all Bronze, Silver, Gold, and Platinum quality scale rules. Rules that don't apply (discovery, reauthentication, actions, stale-devices, inject-websession) are marked as `exempt` with German comments.
 
 #### `etherlynx.py`
-Verbatim copy of `danfoss_etherlynx.py` kept inside the component package so HACS installs a self-contained directory. Any changes to the protocol library must be mirrored in both files.
-
-#### `strings.json` / `translations/en.json`
-UI strings organized in three sections: `config` (config flow), `options` (options flow), `exceptions` (translated error messages), `entity` (sensor name translations for all 52 entities). `strings.json` is German (primary); `translations/en.json` is English.
-
-#### `icons.json`
-MDI icon definitions for all 52 sensor entities under `entity.sensor.<key>.default`. Icons are grouped by category (energy, voltage, current, power, frequency, temperature, status).
-
----
-
-### `danfoss_etherlynx.py`
-The low-level protocol library. Everything needed to speak EtherLynx lives here.
+The EtherLynx protocol library. Self-contained inside the component package so HACS installs everything in one directory.
 
 **Key components:**
 - `MessageID` enum — Packet type identifiers: `PING` (0x01), `GET_SET_PARAMETER` (0x02), `GET_SET_TEXT` (0x03)
@@ -128,10 +116,15 @@ The low-level protocol library. Everything needed to speak EtherLynx lives here.
 - Module-level helpers: `build_ping_packet()`, `build_get_parameters_packet()`, `parse_ping_response()`, `parse_parameter_response()`
 
 **Protocol notes:**
-- Packets are little-endian (Intel byte order)
 - Fixed 52-byte header followed by variable payload
 - Parameter requests can be batched (multiple IDs in one packet)
 - Serial number must be included in the header after discovery
+
+#### `strings.json` / `translations/en.json`
+UI strings organized in three sections: `config` (config flow), `options` (options flow), `exceptions` (translated error messages), `entity` (sensor name translations for all 52 entities). `strings.json` is German (primary); `translations/en.json` is English.
+
+#### `icons.json`
+MDI icon definitions for all 52 sensor entities under `entity.sensor.<key>.default`. Icons are grouped by category (energy, voltage, current, power, frequency, temperature, status).
 
 ---
 
@@ -188,20 +181,6 @@ The EtherLynx protocol uses **mixed endianness** — not uniformly little-endian
 
 ---
 
-## Running the Integration
-
-### Quick test (discover inverter)
-```bash
-python3 danfoss_etherlynx.py 192.168.1.100 --mode discover
-```
-
-### Read all parameters as JSON
-```bash
-python3 danfoss_etherlynx.py 192.168.1.100 --mode all -v
-```
-
----
-
 ## Dependencies
 
 All dependencies are stdlib-only — no install needed for the core library:
@@ -211,7 +190,7 @@ All dependencies are stdlib-only — no install needed for the core library:
 
 ## TLX_PARAMETERS Registry
 
-Each entry in `TLX_PARAMETERS` (in `danfoss_etherlynx.py`) is a `ParameterDef` with:
+Each entry in `TLX_PARAMETERS` (in `custom_components/danfoss_tlx/etherlynx.py`) is a `ParameterDef` with:
 - `param_id` — Danfoss parameter number (from spec)
 - `module_id` — Which board/module to query
 - `data_type` — `DataType` enum value
@@ -226,13 +205,11 @@ When adding new parameters, follow this pattern exactly and include the Danfoss 
 
 ## Adding New Sensors
 
-1. Add a new `ParameterDef` entry to `TLX_PARAMETERS` in `danfoss_etherlynx.py`
-2. Mirror the identical change in `custom_components/danfoss_tlx/etherlynx.py`
-3. Verify the parameter ID, module ID, data type, and scaling factor against the PDF spec
-4. Add the sensor's translation key to `strings.json` (`entity.sensor.<key>.name`) and `translations/en.json`
-5. Add the sensor's icon to `icons.json` (`entity.sensor.<key>.default`)
-6. Test with `python3 danfoss_etherlynx.py <ip> --mode all` to confirm the raw value reads correctly
-7. The HACS sensor platform picks it up automatically — no changes to `sensor.py` needed
+1. Add a new `ParameterDef` entry to `TLX_PARAMETERS` in `custom_components/danfoss_tlx/etherlynx.py`
+2. Verify the parameter ID, module ID, data type, and scaling factor against the PDF spec
+3. Add the sensor's translation key to `strings.json` (`entity.sensor.<key>.name`) and `translations/en.json`
+4. Add the sensor's icon to `icons.json` (`entity.sensor.<key>.default`)
+5. The HACS sensor platform picks it up automatically — no changes to `sensor.py` needed
 
 ---
 
@@ -282,7 +259,7 @@ Four GitHub Actions workflows run on pushes to `main` and on pull requests:
 
 | Workflow | File | Purpose |
 |---|---|---|
-| **Test & Lint** | `.github/workflows/test.yml` | Runs ruff linter, verifies etherlynx copies are in sync, runs pytest (Python 3.11–3.13) |
+| **Test & Lint** | `.github/workflows/test.yml` | Runs ruff linter and pytest (Python 3.11–3.13) |
 | **HACS Validation** | `.github/workflows/hacs.yml` | Validates HACS integration requirements (brand assets, manifest, etc.) |
 | **Hassfest** | `.github/workflows/hassfest.yml` | Validates HA integration manifest (key ordering, required fields) |
 | **Release Drafter** | `.github/workflows/release.yml` | Auto-drafts release notes from merged PRs (push to main only) |
@@ -301,7 +278,6 @@ PR labels control version bumping and changelog categories:
 - The project is intentionally kept dependency-light — avoid adding third-party packages unless essential.
 - The README is the primary user documentation and is written in German; keep it in sync with any behavioral changes.
 - The included PDF (`ComLynx and EtherLynx User Guide.pdf`) is the authoritative reference for all protocol details. Consult it before modifying packet structure.
-- Both copies of etherlynx.py must stay in sync — CI verifies this with a diff check.
 - Run `ruff check` before committing; CI enforces clean linting.
 
 ---

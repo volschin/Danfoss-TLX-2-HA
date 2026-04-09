@@ -262,13 +262,6 @@ Wenn Discovery (Ping) funktioniert, aber keine Parameterwerte geliefert werden:
 - **Gerätetyp:** TLX 6k/8k/10k/12.5k/15k können unterschiedliche Parameter unterstützen
 - **Protokoll-Timing:** Manche Inverter brauchen längere Timeouts
 
-**Diagnose-Kommandos:**
-
-```bash
-python3 danfoss_etherlynx.py 192.168.1.100 --mode discover
-python3 danfoss_etherlynx.py 192.168.1.100 --mode all -v
-```
-
 **E2E-Test gegen echten Inverter:**
 
 ```bash
@@ -280,7 +273,7 @@ INVERTER_IP=192.168.1.100 python -m pytest tests/test_e2e_inverter.py -v -s
 <details>
 <summary>Falsche Werte</summary>
 
-- Skalierungsfaktoren in `danfoss_etherlynx.py` prüfen
+- Skalierungsfaktoren in `custom_components/danfoss_tlx/etherlynx.py` prüfen
 - Manche Parameter sind erst ab bestimmten Firmware-Versionen verfügbar
 - String 3 ist nur bei TLX 10k/12.5k/15k vorhanden
 - Temperatursensoren zeigen "Nicht verfügbar" wenn kein externer Sensor angeschlossen ist (Sentinel-Wert ≥ 120°C)

@@ -288,3 +288,13 @@ PR labels control version bumping and changelog categories:
 - Feature/AI branches follow the pattern: `claude/<description>-<id>`
 - Commit messages should be concise and in English (the git history uses English)
 - CI checks (test, lint, HACS, hassfest) run on all pushes and PRs to main
+
+### Release Governance
+
+**Never publish a GitHub release until all four CI workflows pass green on `main`:**
+
+1. Check `gh run list --limit 8` after pushing to main
+2. Confirm all four workflows — **Test & Lint**, **HACS Validation**, **Hassfest**, **Release Drafter** — show `completed / success`
+3. Only then bump `manifest.json` version and publish the release
+
+If any workflow fails, fix it first, push the fix, and wait for a clean run before releasing.

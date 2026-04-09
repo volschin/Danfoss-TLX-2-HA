@@ -15,7 +15,7 @@ import socket
 import struct
 import pytest
 
-from danfoss_etherlynx import (
+from custom_components.danfoss_tlx.etherlynx import (
     DanfossEtherLynx,
     TLX_PARAMETERS,
     ETHERLYNX_PORT,

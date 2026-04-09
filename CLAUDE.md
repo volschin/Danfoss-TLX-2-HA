@@ -59,10 +59,6 @@ Danfoss-TLX-2-HA/
 │       ├── hassfest.yml             # Hassfest Validation
 │       └── release.yml              # Release Drafter (auto-drafts releases from PRs)
 ├── danfoss_etherlynx.py             # Standalone protocol library (also used as etherlynx.py)
-├── danfoss_ha_bridge.py             # Legacy MQTT bridge daemon (kept for reference)
-├── danfoss_config.yaml              # Legacy MQTT bridge configuration template
-├── configuration.yaml               # HA sensor/automation examples (legacy)
-├── danfoss_etherlynx.service        # systemd service unit (legacy MQTT daemon)
 ├── README.md                        # User documentation (German)
 ├── CLAUDE.md                        # This file
 ├── LICENSE                          # MIT License
@@ -71,7 +67,6 @@ Danfoss-TLX-2-HA/
 ```
 
 **Primary integration path**: HACS installs `custom_components/danfoss_tlx/` into Home Assistant.
-**Legacy path**: The MQTT bridge (`danfoss_ha_bridge.py` + systemd service) remains for users who cannot use HACS.
 
 ---
 
@@ -138,58 +133,6 @@ The low-level protocol library. Everything needed to speak EtherLynx lives here.
 - Parameter requests can be batched (multiple IDs in one packet)
 - Serial number must be included in the header after discovery
 
-### `danfoss_ha_bridge.py`
-The HA integration layer. Reads from `danfoss_etherlynx.py` and publishes to Home Assistant.
-
-**Key components:**
-- `BridgeConfig` dataclass — Holds all runtime configuration
-- `load_config(path, args)` — Loads YAML → applies environment variable overrides → applies CLI argument overrides
-- `publish_mqtt_discovery()` — Generates HA MQTT discovery payloads for each sensor
-- `publish_values()` — Reads current inverter values and publishes to MQTT
-- `run_mqtt_daemon()` — Main loop; polls at three different intervals (realtime, energy, system)
-- `run_json_mode()` — Single-shot execution returning JSON; used with HA `command_line` sensors
-
-**Two operation modes** (select via `--mode`):
-1. `mqtt` — Long-running daemon with periodic polling and MQTT publishing
-2. `json` — One-shot JSON output to stdout, suitable for HA command_line platform
-
-### `danfoss_config.yaml`
-Configuration template. Copy and fill in before running.
-
-```yaml
-inverter_ip: "192.168.1.100"
-inverter_serial: ""                  # auto-detected if empty
-pv_strings: 2                        # 2 or 3 depending on model
-
-mqtt_host: "localhost"
-mqtt_port: 1883
-mqtt_user: ""
-mqtt_password: ""
-mqtt_topic_prefix: "danfoss_tlx"
-mqtt_discovery_prefix: "homeassistant"
-
-poll_interval_realtime: 15           # power, voltage, current (seconds)
-poll_interval_energy: 300            # energy counters (seconds)
-poll_interval_system: 3600           # firmware/model info (seconds)
-
-log_level: "INFO"
-```
-
-### `configuration.yaml`
-Ready-to-use Home Assistant configuration snippets:
-- MQTT-based sensors (auto-discovery preferred)
-- `command_line` sensor fallback
-- ~20 template sensors with Jinja2 expressions (efficiency calculation, totals, etc.)
-- Automations: error alerts, daily production reports, high-output notifications
-- Energy Dashboard integration
-
-### `danfoss_etherlynx.service`
-systemd unit file for the MQTT daemon:
-- Runs as user `homeassistant`
-- Depends on `network-online.target` and `mosquitto.service`
-- Restarts on failure (30 s delay, max 5 restarts in 300 s)
-- Sets MQTT status to `offline` via `ExecStop`
-
 ---
 
 ## Code Conventions
@@ -209,7 +152,7 @@ All comments, docstrings, variable descriptions, and user-facing messages are wr
 Use Python stdlib type hints throughout: `Optional`, `Dict`, `List`, `Any`, `Tuple`. Do not add third-party typing libraries.
 
 ### Dataclasses
-Prefer `@dataclass` for structured configuration and parameter definitions. See `ParameterDef` and `BridgeConfig` as reference.
+Prefer `@dataclass` for structured configuration and parameter definitions. See `ParameterDef` as reference.
 
 ### Enums
 Use `enum.Enum` or `enum.IntEnum` for fixed value sets. See `MessageID`, `Flag`, `DataType`.
@@ -219,7 +162,7 @@ Use `enum.Enum` or `enum.IntEnum` for fixed value sets. See `MessageID`, `Flag`,
 - Use `logger.exception()` for unexpected exceptions
 - Tolerate missing parameters gracefully — return `None` rather than raising
 - Socket operations must have explicit timeouts
-- Mark inverter offline after 10 consecutive failed reads (see `run_mqtt_daemon`)
+- Mark inverter offline after consecutive failed reads
 
 ### Protocol Accuracy
 - All byte layouts must match the official Danfoss EtherLynx spec (see the included PDF)
@@ -245,19 +188,6 @@ The EtherLynx protocol uses **mixed endianness** — not uniformly little-endian
 
 ---
 
-## Configuration Layering
-
-Configuration is resolved in priority order (highest wins):
-
-1. **CLI arguments** (`--inverter-ip`, `--mqtt-host`, etc.)
-2. **Environment variables** (e.g. `DANFOSS_INVERTER_IP`, `DANFOSS_MQTT_HOST`)
-3. **YAML file** (`danfoss_config.yaml`)
-4. **Hardcoded defaults** (in `BridgeConfig`)
-
-When modifying config handling, maintain this layering in `load_config()`.
-
----
-
 ## Running the Integration
 
 ### Quick test (discover inverter)
@@ -270,33 +200,12 @@ python3 danfoss_etherlynx.py 192.168.1.100 --mode discover
 python3 danfoss_etherlynx.py 192.168.1.100 --mode all -v
 ```
 
-### Run MQTT daemon
-```bash
-python3 danfoss_ha_bridge.py --mode mqtt --config danfoss_config.yaml
-```
-
-### Run as systemd service
-```bash
-sudo cp danfoss_etherlynx.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now danfoss_etherlynx
-sudo journalctl -u danfoss_etherlynx -f
-```
-
 ---
 
 ## Dependencies
 
-### Required (stdlib only, no install needed for core library)
+All dependencies are stdlib-only — no install needed for the core library:
 - `socket`, `struct`, `logging`, `json`, `time`, `pathlib`, `dataclasses`, `enum`
-
-### Optional (install as needed)
-```bash
-pip install paho-mqtt   # for MQTT daemon mode
-pip install PyYAML      # for YAML config file support
-```
-
-The bridge script imports these lazily and degrades gracefully when absent.
 
 ---
 
@@ -308,7 +217,7 @@ Each entry in `TLX_PARAMETERS` (in `danfoss_etherlynx.py`) is a `ParameterDef` w
 - `data_type` — `DataType` enum value
 - `scale` — Divide raw integer by this value to get engineering units
 - `unit` — Display unit string (e.g. `"W"`, `"V"`, `"kWh"`)
-- `device_class` — Home Assistant device class string for MQTT discovery
+- `device_class` — Home Assistant device class string (e.g. `"power"`, `"energy"`, `"voltage"`)
 - `description` — German description string
 
 When adding new parameters, follow this pattern exactly and include the Danfoss parameter ID reference in a comment.

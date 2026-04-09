@@ -201,17 +201,16 @@ Ein fertiges Inverter-Dashboard für HA 2026.2 (Sections-View) liegt unter [`das
 ```mermaid
 flowchart LR
     subgraph ha["Home Assistant"]
-        bridge["danfoss_ha_bridge.py<br/>→ MQTT oder<br/>→ JSON stdout"]
-        mqtt["MQTT Broker<br/>(Mosquitto)<br/>Auto-Discovery"]
+        coord["DataUpdateCoordinator<br/>(danfoss_tlx)"]
         sensors["HA Sensoren<br/>Energy Dashboard<br/>40+ Sensoren"]
-        bridge --> mqtt --> sensors
+        coord --> sensors
     end
 
     subgraph inverter["Danfoss TLX Pro"]
         comm["Communication<br/>Board (#8)<br/>Ethernet Port"]
     end
 
-    bridge <-- "UDP Port 48004<br/>Ethernet / LAN<br/>Ping → Discovery<br/>Get Parameters → ← Values" --> comm
+    coord <-- "UDP Port 48004<br/>Ethernet / LAN<br/>Ping → Discovery<br/>Get Parameters → ← Values" --> comm
 ```
 
 ## 🔌 Protokoll-Details
@@ -224,52 +223,6 @@ Das EtherLynx-Protokoll ist die Ethernet-Variante des ComLynx-Protokolls (offizi
 - **Parameter-Zugriff:** Index/Subindex, Module ID 8 (Communication Board)
 - **Batch-Abfrage:** Mehrere Parameter pro Request möglich
 
-## 🔧 Legacy: MQTT-Bridge
-
-Für Nutzer die HACS nicht verwenden können, steht eine MQTT-Bridge bereit:
-
-<details>
-<summary>MQTT-Bridge Anleitung aufklappen</summary>
-
-### Voraussetzungen
-
-- Python 3.9+ auf dem HA-Host
-- `pip install paho-mqtt` (nur für MQTT-Modus)
-
-### Dateien
-
-| Datei | Beschreibung |
-|---|---|
-| `danfoss_etherlynx.py` | Protokoll-Bibliothek (EtherLynx UDP) |
-| `danfoss_ha_bridge.py` | HA-Bridge (MQTT-Daemon oder JSON-Modus) |
-| `danfoss_config.yaml` | Konfigurationsdatei |
-| `configuration.yaml` | HA Sensor- und Automations-Konfiguration |
-| `danfoss_etherlynx.service` | systemd-Service für den MQTT-Daemon |
-
-### Schnellstart
-
-```bash
-# Dateien kopieren
-mkdir -p /config/scripts
-cp danfoss_etherlynx.py danfoss_ha_bridge.py danfoss_config.yaml /config/scripts/
-
-# IP-Adresse in danfoss_config.yaml anpassen
-# inverter_ip: "192.168.1.100"
-
-# Schnelltest
-python3 /config/scripts/danfoss_etherlynx.py 192.168.1.100 --mode discover
-
-# MQTT-Daemon starten
-pip install paho-mqtt
-python3 /config/scripts/danfoss_ha_bridge.py --mode mqtt --config /config/scripts/danfoss_config.yaml
-
-# Als systemd-Service installieren
-sudo cp danfoss_etherlynx.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now danfoss_etherlynx
-```
-
-</details>
 
 ## ⚠️ Bekannte Einschränkungen
 
@@ -334,15 +287,6 @@ INVERTER_IP=192.168.1.100 python -m pytest tests/test_e2e_inverter.py -v -s
 
 </details>
 
-<details>
-<summary>MQTT Discovery funktioniert nicht</summary>
-
-1. Mosquitto-Broker installiert und läuft?
-2. MQTT-Integration in HA aktiviert?
-3. Discovery-Prefix korrekt? (default: `homeassistant`)
-4. Logs prüfen: `sudo journalctl -u danfoss_etherlynx -f`
-
-</details>
 
 ## ⚖️ Vergleich: EtherLynx vs. RS485/ESP32
 

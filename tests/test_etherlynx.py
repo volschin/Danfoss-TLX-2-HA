@@ -801,7 +801,7 @@ class TestRegistry:
 
     def test_operation_modes_cover_all_ranges(self):
         """Alle definierten Bereiche liefern einen Text, nicht 'Unbekannt'."""
-        from danfoss_etherlynx import get_operation_mode_text
+        from custom_components.danfoss_tlx.etherlynx import get_operation_mode_text
         test_values = [0, 5, 9, 10, 30, 49, 50, 55, 59, 60, 65, 69, 70, 75, 79, 80, 85, 89]
         for v in test_values:
             text = get_operation_mode_text(v)
@@ -812,7 +812,7 @@ class TestRegistry:
 
     def test_event_codes_cover_known_events(self):
         """Bekannte Ereignis-Codes liefern einen Text."""
-        from danfoss_etherlynx import get_event_text
+        from custom_components.danfoss_tlx.etherlynx import get_event_text
         assert get_event_text(0) == "Kein Ereignis"
         assert get_event_text(1) == "Netzspannung L1 zu niedrig"
         assert get_event_text(115) == "Isolationswiderstand PV-Erde zu niedrig"

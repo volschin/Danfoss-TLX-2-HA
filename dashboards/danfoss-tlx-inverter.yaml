@@ -110,59 +110,32 @@ views:
             grid_options:
               columns: full
               rows: 1
-          - type: statistic
-            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzenergie_heute_gesamt
-            period:
-              calendar:
-                period: day
-            stat_type: change
-            name: Heute
-            icon: mdi:calendar-today
-            grid_options:
-              columns: 3
-              rows: 1
-          - type: statistic
-            entity: sensor.danfoss_tlx_pro_<SERIAL>_produktion_diese_woche
-            period:
-              calendar:
-                period: week
-            stat_type: change
-            name: Diese Woche
-            icon: mdi:calendar-week
-            grid_options:
-              columns: 3
-              rows: 1
-          - type: statistic
-            entity: sensor.danfoss_tlx_pro_<SERIAL>_produktion_diesen_monat
-            period:
-              calendar:
-                period: month
-            stat_type: change
-            name: Diesen Monat
-            icon: mdi:calendar-month
-            grid_options:
-              columns: 3
-              rows: 1
-          - type: statistic
-            entity: sensor.danfoss_tlx_pro_<SERIAL>_produktion_dieses_jahr
-            period:
-              calendar:
-                period: year
-            stat_type: change
-            name: Dieses Jahr
-            icon: mdi:calendar
-            grid_options:
-              columns: 3
-              rows: 1
-          - type: history-graph
-            title: Leistungsverlauf heute
-            hours_to_show: 24
-            entities:
-              - entity: sensor.danfoss_tlx_pro_<SERIAL>_netzleistung_gesamt
-                name: Gesamtleistung
+          - type: tile
             grid_options:
               columns: 12
-              rows: 3
+              rows: 1
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_letztes_ereignis_2
+            name: Letztes Ereignis
+            icon: mdi:alert-circle-outline
+            color: amber
+            vertical: false
+            features_position: bottom
+          - type: entity
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_produktion_heute_log
+            name: Heute
+            icon: mdi:calendar-today
+          - type: entity
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_produktion_diese_woche
+            name: Akt. Woche
+            icon: mdi:calendar-week
+          - type: entity
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_produktion_diesen_monat
+            name: Akt. Monat
+            icon: mdi:calendar-month
+          - type: entity
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_produktion_dieses_jahr
+            icon: mdi:calendar
+            name: Akt. Jahr
 
       # ================================================================
       # BEREICH 3: PV-Strings (DC-Seite)
@@ -173,62 +146,89 @@ views:
             heading: PV-Strings (DC)
             heading_style: title
             icon: mdi:solar-panel-large
-          - type: heading
-            heading: String 1
-            heading_style: subtitle
-            icon: mdi:numeric-1-circle
-          - type: tile
-            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_leistung_string_1
-            name: Leistung
-            icon: mdi:flash
-            color: orange
+          - type: gauge
+            entity: sensor.danfoss_tlx_pro_<SERIAL>_netzleistung_gesamt
+            name: Aktuelle Leistung
+            unit: W
+            needle: true
+            min: 0
+            max: 8000
+            severity:
+              green: 500
+              yellow: 6000
+              red: 7500
             grid_options:
-              columns: 4
-              rows: 1
-          - type: tile
-            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_spannung_string_1
-            name: Spannung
-            icon: mdi:sine-wave
-            color: blue
-            grid_options:
-              columns: 4
-              rows: 1
-          - type: tile
-            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_strom_string_1
-            name: Strom
-            icon: mdi:current-dc
-            color: cyan
-            grid_options:
-              columns: 4
-              rows: 1
-          - type: heading
-            heading: String 2
-            heading_style: subtitle
-            icon: mdi:numeric-2-circle
-          - type: tile
-            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_leistung_string_2
-            name: Leistung
-            icon: mdi:flash
-            color: orange
-            grid_options:
-              columns: 4
-              rows: 1
-          - type: tile
-            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_spannung_string_2
-            name: Spannung
-            icon: mdi:sine-wave
-            color: blue
-            grid_options:
-              columns: 4
-              rows: 1
-          - type: tile
-            entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_strom_string_2
-            name: Strom
-            icon: mdi:current-dc
-            color: cyan
-            grid_options:
-              columns: 4
-              rows: 1
+              columns: full
+              rows: 3
+          - type: horizontal-stack
+            cards:
+              - type: vertical-stack
+                cards:
+                  - type: heading
+                    heading: String 1
+                    heading_style: subtitle
+                    icon: mdi:numeric-1-circle
+                    grid_options:
+                      columns: full
+                      rows: auto
+                  - type: tile
+                    grid_options:
+                      columns: 4
+                      rows: 1
+                    entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_leistung_string_1
+                    name: Leistung
+                    icon: mdi:flash
+                    color: orange
+                    vertical: false
+                    features_position: bottom
+                  - type: tile
+                    entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_spannung_string_1
+                    name: Spannung
+                    icon: mdi:sine-wave
+                    color: blue
+                    grid_options:
+                      columns: 4
+                      rows: 1
+                  - type: tile
+                    grid_options:
+                      columns: 4
+                      rows: 1
+                    entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_strom_string_1
+                    name: Strom
+                    icon: mdi:current-dc
+                    color: cyan
+                    vertical: false
+                    features_position: bottom
+              - type: vertical-stack
+                cards:
+                  - type: heading
+                    heading: String 2
+                    heading_style: subtitle
+                    icon: mdi:numeric-2-circle
+                  - type: tile
+                    entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_leistung_string_2
+                    name: Leistung
+                    icon: mdi:flash
+                    color: orange
+                    grid_options:
+                      columns: 4
+                      rows: 1
+                  - type: tile
+                    entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_spannung_string_2
+                    name: Spannung
+                    icon: mdi:sine-wave
+                    color: blue
+                    grid_options:
+                      columns: 4
+                      rows: 1
+                  - type: tile
+                    entity: sensor.danfoss_tlx_pro_<SERIAL>_pv_strom_string_2
+                    name: Strom
+                    icon: mdi:current-dc
+                    color: cyan
+                    grid_options:
+                      columns: 4
+                      rows: 1
           - type: history-graph
             title: Stringvergleich
             hours_to_show: 24

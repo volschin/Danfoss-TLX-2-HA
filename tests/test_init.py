@@ -18,10 +18,32 @@ class TestIntegrationSetup:
 
         assert result is True
         assert mock_config_entry.runtime_data is mock_coordinator
+        # First-Refresh muss beim Setup tatsächlich erfolgen
+        mock_coordinator.async_config_entry_first_refresh.assert_awaited_once_with()
         mock_hass.config_entries.async_forward_entry_setups.assert_awaited_once_with(
             mock_config_entry, PLATFORMS
         )
         mock_config_entry.async_on_unload.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("custom_components.danfoss_tlx.DanfossCoordinator")
+    async def test_setup_entry_propagates_first_refresh_error(
+        self, mock_coordinator_cls, mock_hass, mock_config_entry
+    ):
+        """Ein Fehler beim First-Refresh muss propagiert werden, damit HA den Entry als fehlgeschlagen markiert."""
+        from homeassistant.exceptions import ConfigEntryNotReady
+
+        mock_coordinator = MagicMock()
+        mock_coordinator.async_config_entry_first_refresh = AsyncMock(
+            side_effect=ConfigEntryNotReady("Inverter unreachable")
+        )
+        mock_coordinator_cls.return_value = mock_coordinator
+
+        with pytest.raises(ConfigEntryNotReady):
+            await async_setup_entry(mock_hass, mock_config_entry)
+
+        # Plattformen dürfen nach gescheitertem Refresh nicht geladen werden
+        mock_hass.config_entries.async_forward_entry_setups.assert_not_called()
 
     @pytest.mark.asyncio
     @patch("custom_components.danfoss_tlx.DanfossCoordinator")
@@ -36,6 +58,21 @@ class TestIntegrationSetup:
         result = await async_unload_entry(mock_hass, mock_config_entry)
 
         assert result is True
+        # Plattform-Unload muss tatsächlich an HA delegiert werden
+        mock_hass.config_entries.async_unload_platforms.assert_awaited_once_with(
+            mock_config_entry, PLATFORMS
+        )
+
+    @pytest.mark.asyncio
+    async def test_unload_entry_returns_false_when_platforms_fail(
+        self, mock_hass, mock_config_entry
+    ):
+        """Wenn HA das Plattform-Unload ablehnt, gibt async_unload_entry False zurück."""
+        mock_hass.config_entries.async_unload_platforms = AsyncMock(return_value=False)
+
+        result = await async_unload_entry(mock_hass, mock_config_entry)
+
+        assert result is False
 
     @pytest.mark.asyncio
     @patch("custom_components.danfoss_tlx.DanfossCoordinator")

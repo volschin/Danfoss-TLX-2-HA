@@ -462,11 +462,15 @@ class TestDanfossEtherLynx:
 
     @pytest.mark.asyncio
     async def test_read_parameters_skips_unknown_keys(self):
+        """Unbekannte Keys werden gefiltert, bevor überhaupt ein UDP-Request erzeugt wird."""
         client = DanfossEtherLynx("192.168.1.100")
         client._inverter_serial = "SER123"
-        with patch.object(client, "_send_receive_async", AsyncMock(return_value=None)):
+        mock_send = AsyncMock(return_value=None)
+        with patch.object(client, "_send_receive_async", mock_send):
             result = await client.read_parameters(["nonexistent_key"])
         assert result == {}
+        # Keine Batches → kein _send_receive_async-Aufruf
+        mock_send.assert_not_called()
         await client.close()
 
     @pytest.mark.asyncio
@@ -486,7 +490,8 @@ class TestDanfossEtherLynx:
         with patch.object(client, "_send_receive_async", AsyncMock(side_effect=responses)):
             result = await client.read_all()
 
-        assert isinstance(result, dict)
+        # Jeder Parameter aus der Registry muss in der Antwort enthalten sein
+        assert set(result.keys()) == set(TLX_PARAMETERS.keys())
         await client.close()
 
     @pytest.mark.asyncio
@@ -540,44 +545,98 @@ class TestDanfossEtherLynx:
 
     @pytest.mark.asyncio
     async def test_read_realtime_returns_subset(self, make_parameter_response):
-        """read_realtime gibt nur Echtzeit-Parameter zurück."""
+        """read_realtime gibt ausschließlich Echtzeit-Parameter zurück, keine Energie-Parameter."""
         from custom_components.danfoss_tlx.etherlynx import TLX_PARAMETERS
-        all_keys = list(TLX_PARAMETERS.keys())
-        num_batches = (len(all_keys) + 9) // 10
-        responses = []
-        for i in range(num_batches):
-            batch_start = i * 10
-            batch_end = min(batch_start + 10, len(all_keys))
-            batch_params = [TLX_PARAMETERS[k] for k in all_keys[batch_start:batch_end]]
-            resp = make_parameter_response([(p, struct.pack('>I', 100)) for p in batch_params])
-            responses.append(resp)
+
+        # Erwartete Echtzeit-Keys (aus read_realtime-Implementierung)
+        expected_realtime = {
+            "grid_power_total",
+            "grid_power_l1", "grid_power_l2", "grid_power_l3",
+            "pv_voltage_1", "pv_voltage_2",
+            "pv_current_1", "pv_current_2",
+            "pv_power_1", "pv_power_2",
+            "grid_voltage_l1", "grid_voltage_l2", "grid_voltage_l3",
+            "grid_current_l1", "grid_current_l2", "grid_current_l3",
+            "grid_frequency_avg",
+            "operation_mode",
+            "grid_energy_today_total",
+        }
+        # Energie-spezifische Keys, die NICHT enthalten sein dürfen
+        forbidden = {"total_energy", "production_this_year", "production_this_month"}
+
+        def fake_send(packet):
+            # Extrahiere die Batch-Parameter aus dem Packet → Response bauen
+            from custom_components.danfoss_tlx.etherlynx import ETHERLYNX_HEADER_SIZE
+            payload = packet[ETHERLYNX_HEADER_SIZE:]
+            num = struct.unpack('<I', payload[0:4])[0]
+            batch_params = []
+            for i in range(num):
+                entry = payload[4 + i * 8: 4 + (i + 1) * 8]
+                idx, sub = entry[2], entry[3]
+                for p in TLX_PARAMETERS.values():
+                    if p.index == idx and p.subindex == sub:
+                        batch_params.append(p)
+                        break
+            return make_parameter_response(
+                [(p, struct.pack('>I', 100)) for p in batch_params]
+            )
 
         client = DanfossEtherLynx("192.168.1.100")
         client._inverter_serial = "SER123"
-        with patch.object(client, "_send_receive_async", AsyncMock(side_effect=responses * 2)):
+        with patch.object(
+            client, "_send_receive_async",
+            AsyncMock(side_effect=lambda packet, timeout=None: fake_send(packet)),
+        ):
             result = await client.read_realtime()
-        assert isinstance(result, dict)
+
+        assert set(result.keys()) == expected_realtime
+        assert expected_realtime.issubset(set(TLX_PARAMETERS.keys()))
+        assert forbidden.isdisjoint(set(result.keys()))
         await client.close()
 
     @pytest.mark.asyncio
     async def test_read_energy_returns_subset(self, make_parameter_response):
-        """read_energy gibt Energie-Parameter zurück."""
+        """read_energy gibt ausschließlich Energie-Parameter zurück, keine Echtzeit-Messwerte."""
         from custom_components.danfoss_tlx.etherlynx import TLX_PARAMETERS
-        all_keys = list(TLX_PARAMETERS.keys())
-        num_batches = (len(all_keys) + 9) // 10
-        responses = []
-        for i in range(num_batches):
-            batch_start = i * 10
-            batch_end = min(batch_start + 10, len(all_keys))
-            batch_params = [TLX_PARAMETERS[k] for k in all_keys[batch_start:batch_end]]
-            resp = make_parameter_response([(p, struct.pack('>I', 100)) for p in batch_params])
-            responses.append(resp)
+
+        expected_energy = {
+            "total_energy", "energy_today",
+            "grid_energy_today_total",
+            "grid_energy_today_l1", "grid_energy_today_l2", "grid_energy_today_l3",
+            "pv_energy_1", "pv_energy_2",
+            "production_today_log", "production_this_week",
+            "production_this_month", "production_this_year",
+        }
+        # Echtzeit-Keys dürfen nicht enthalten sein
+        forbidden = {"grid_voltage_l1", "grid_frequency_avg", "operation_mode"}
+
+        def fake_send(packet):
+            from custom_components.danfoss_tlx.etherlynx import ETHERLYNX_HEADER_SIZE
+            payload = packet[ETHERLYNX_HEADER_SIZE:]
+            num = struct.unpack('<I', payload[0:4])[0]
+            batch_params = []
+            for i in range(num):
+                entry = payload[4 + i * 8: 4 + (i + 1) * 8]
+                idx, sub = entry[2], entry[3]
+                for p in TLX_PARAMETERS.values():
+                    if p.index == idx and p.subindex == sub:
+                        batch_params.append(p)
+                        break
+            return make_parameter_response(
+                [(p, struct.pack('>I', 100)) for p in batch_params]
+            )
 
         client = DanfossEtherLynx("192.168.1.100")
         client._inverter_serial = "SER123"
-        with patch.object(client, "_send_receive_async", AsyncMock(side_effect=responses * 2)):
+        with patch.object(
+            client, "_send_receive_async",
+            AsyncMock(side_effect=lambda packet, timeout=None: fake_send(packet)),
+        ):
             result = await client.read_energy()
-        assert isinstance(result, dict)
+
+        assert set(result.keys()) == expected_energy
+        assert expected_energy.issubset(set(TLX_PARAMETERS.keys()))
+        assert forbidden.isdisjoint(set(result.keys()))
         await client.close()
 
     def test_transaction_counter_wraps(self):

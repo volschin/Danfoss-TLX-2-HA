@@ -1,4 +1,5 @@
 """Tests für den DanfossCoordinator."""
+from datetime import timedelta
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
@@ -13,15 +14,23 @@ from custom_components.danfoss_tlx.const import (
 )
 
 
-def _make_coordinator(mock_hass, mock_config_entry):
-    """Erstellt einen DanfossCoordinator mit gepatchtem super().__init__."""
+def _make_coordinator(mock_hass, mock_config_entry, capture_super: bool = False):
+    """Erstellt einen DanfossCoordinator.
+
+    Der super().__init__-Aufruf wird gepatcht, weil DataUpdateCoordinator in
+    neueren HA-Versionen einen Frame-Helper erwartet. Wenn capture_super=True,
+    wird der Mock zurückgegeben, um die an super() übergebenen Argumente zu
+    verifizieren.
+    """
     with patch(
         "custom_components.danfoss_tlx.coordinator.DataUpdateCoordinator.__init__",
         return_value=None,
-    ):
+    ) as mock_super_init:
         from custom_components.danfoss_tlx.coordinator import DanfossCoordinator
         coordinator = DanfossCoordinator(mock_hass, mock_config_entry)
         coordinator.hass = mock_hass
+    if capture_super:
+        return coordinator, mock_super_init
     return coordinator
 
 
@@ -32,13 +41,35 @@ class TestDanfossCoordinator:
         assert coordinator._inverter_serial == "TLX123456"
 
     def test_init_options_override_interval(self, mock_hass, mock_config_entry):
+        """options[scan_interval] wird tatsächlich an DataUpdateCoordinator übergeben."""
         mock_config_entry.options = {CONF_SCAN_INTERVAL: 60}
-        _make_coordinator(mock_hass, mock_config_entry)
-        interval = mock_config_entry.options.get(
-            CONF_SCAN_INTERVAL,
-            mock_config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+        _, mock_super_init = _make_coordinator(
+            mock_hass, mock_config_entry, capture_super=True
         )
-        assert interval == 60
+        # Eine super().__init__-Invocation
+        mock_super_init.assert_called_once()
+        kwargs = mock_super_init.call_args.kwargs
+        assert kwargs["update_interval"] == timedelta(seconds=60)
+
+    def test_init_data_interval_used_when_no_options(self, mock_hass, mock_config_entry):
+        """Wenn options leer: scan_interval aus entry.data wird verwendet."""
+        mock_config_entry.options = {}
+        mock_config_entry.data[CONF_SCAN_INTERVAL] = 45
+        _, mock_super_init = _make_coordinator(
+            mock_hass, mock_config_entry, capture_super=True
+        )
+        kwargs = mock_super_init.call_args.kwargs
+        assert kwargs["update_interval"] == timedelta(seconds=45)
+
+    def test_init_default_interval_as_last_fallback(self, mock_hass, mock_config_entry):
+        """Wenn weder options noch data scan_interval enthalten: DEFAULT_SCAN_INTERVAL."""
+        mock_config_entry.options = {}
+        mock_config_entry.data.pop(CONF_SCAN_INTERVAL, None)
+        _, mock_super_init = _make_coordinator(
+            mock_hass, mock_config_entry, capture_super=True
+        )
+        kwargs = mock_super_init.call_args.kwargs
+        assert kwargs["update_interval"] == timedelta(seconds=DEFAULT_SCAN_INTERVAL)
 
     def test_inverter_serial_property(self, mock_hass, mock_config_entry):
         coordinator = _make_coordinator(mock_hass, mock_config_entry)

@@ -85,7 +85,7 @@ Die Integration nutzt **Polling** über das EtherLynx-Protokoll (UDP). Der DataU
 | TLX 6k | 6.000 W | 2 | ✓ |
 | TLX 6.5k | 6.500 W | 2 | – |
 | TLX 7k | 7.000 W | 2 | – |
-| TLX 8k | 8.000 W | 2 | – |
+| TLX 8k | 8.000 W | 2 | ✓ |
 | TLX 10k | 10.000 W | 2 oder 3 | ✓ |
 | TLX 12.5k | 12.500 W | 3 | – |
 | TLX 15k | 15.000 W | 3 | ✓ |

@@ -10,6 +10,7 @@ Verwendung:
 Ohne INVERTER_IP werden alle Tests automatisch übersprungen.
 """
 
+import asyncio
 import os
 import socket
 import struct
@@ -38,11 +39,12 @@ def inverter_ip():
     return ip
 
 
-@pytest.fixture
-def client(inverter_ip):
-    """Erstellt einen DanfossEtherLynx Client."""
-    with DanfossEtherLynx(inverter_ip, timeout=5.0) as c:
-        yield c
+async def _recvfrom_async(sock: socket.socket, bufsize: int, timeout: float) -> bytes:
+    """Async-Wrapper um socket.recvfrom mit Timeout."""
+    loop = asyncio.get_running_loop()
+    sock.setblocking(False)
+    data, _addr = await asyncio.wait_for(loop.sock_recvfrom(sock, bufsize), timeout)
+    return data
 
 
 # ── Discovery ────────────────────────────────────────────────────────
@@ -62,27 +64,31 @@ class TestDiscovery:
         # byte39 = message_id: PING
         assert packet[39] == MessageID.PING
 
-    def test_discover_returns_serial(self, client):
+    @pytest.mark.asyncio
+    async def test_discover_returns_serial(self, inverter_ip):
         """Discovery gibt eine nicht-leere Seriennummer zurück."""
-        serial = client.discover()
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            serial = await client.discover()
         assert serial is not None
         assert len(serial) > 0
         print(f"  Seriennummer: {serial}")
 
-    def test_discover_serial_is_stored(self, client):
+    @pytest.mark.asyncio
+    async def test_discover_serial_is_stored(self, inverter_ip):
         """Nach Discovery wird die Seriennummer im Client gespeichert."""
-        serial = client.discover()
-        assert client.inverter_serial == serial
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            serial = await client.discover()
+            assert client.inverter_serial == serial
 
-    def test_ping_response_is_valid(self, inverter_ip):
+    @pytest.mark.asyncio
+    async def test_ping_response_is_valid(self, inverter_ip):
         """Ping-Response hat korrekten Header mit Response-Flag."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5.0)
         sock.bind(('', 0))
         try:
             packet = build_ping_packet()
             sock.sendto(packet, (inverter_ip, ETHERLYNX_PORT))
-            response, addr = sock.recvfrom(4096)
+            response = await _recvfrom_async(sock, 4096, 5.0)
 
             assert len(response) == ETHERLYNX_HEADER_SIZE
             # Response-Flag muss gesetzt sein
@@ -120,12 +126,14 @@ class TestParameterRequest:
         num_params_le = struct.unpack('<I', payload[0:4])[0]
         assert num_params_le == 1
 
-    def test_single_parameter_read(self, client):
+    @pytest.mark.asyncio
+    async def test_single_parameter_read(self, inverter_ip):
         """Einzelner Parameter kann gelesen werden."""
-        serial = client.discover()
-        assert serial is not None
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            serial = await client.discover()
+            assert serial is not None
 
-        result = client.read_parameters(["grid_power_total"])
+            result = await client.read_parameters(["grid_power_total"])
         assert "grid_power_total" in result
         power = result["grid_power_total"]
         assert isinstance(power, float)
@@ -133,12 +141,14 @@ class TestParameterRequest:
         assert power >= 0, f"Negative Leistung: {power} W"
         print(f"  grid_power_total: {power} W")
 
-    def test_batch_parameter_read(self, client):
+    @pytest.mark.asyncio
+    async def test_batch_parameter_read(self, inverter_ip):
         """Mehrere Parameter in einem Batch abfragen."""
-        client.discover()
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            await client.discover()
 
-        keys = ["grid_voltage_l1", "grid_voltage_l2", "grid_voltage_l3"]
-        result = client.read_parameters(keys)
+            keys = ["grid_voltage_l1", "grid_voltage_l2", "grid_voltage_l3"]
+            result = await client.read_parameters(keys)
 
         for key in keys:
             assert key in result, f"Parameter {key} fehlt in Antwort"
@@ -156,17 +166,21 @@ class TestParameterRequest:
 class TestReadAll:
     """Testet das Lesen aller Parameter (vollständiger Durchlauf)."""
 
-    def test_read_all_returns_data(self, client):
+    @pytest.mark.asyncio
+    async def test_read_all_returns_data(self, inverter_ip):
         """read_all() gibt ein nicht-leeres Dict zurück."""
-        client.discover()
-        data = client.read_all()
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            await client.discover()
+            data = await client.read_all()
         assert len(data) > 0, "read_all() gab leeres Dict zurück"
         print(f"  Gelesene Parameter: {len(data)}/{len(TLX_PARAMETERS)}")
 
-    def test_read_all_plausibility(self, client):
+    @pytest.mark.asyncio
+    async def test_read_all_plausibility(self, inverter_ip):
         """Plausibilitätsprüfung der gelesenen Werte."""
-        client.discover()
-        data = client.read_all()
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            await client.discover()
+            data = await client.read_all()
 
         # Netzfrequenz: 0 Hz (aus) oder ~50 Hz (normal)
         if "grid_frequency_avg" in data:
@@ -196,10 +210,12 @@ class TestReadAll:
             assert total >= 0, f"Gesamtenergie {total} Wh negativ"
             print(f"  total_energy: {total} Wh")
 
-    def test_pv_string_values(self, client):
+    @pytest.mark.asyncio
+    async def test_pv_string_values(self, inverter_ip):
         """PV-String-Werte sind physikalisch plausibel."""
-        client.discover()
-        data = client.read_all()
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            await client.discover()
+            data = await client.read_all()
 
         for i in [1, 2]:
             vkey = f"pv_voltage_{i}"
@@ -227,30 +243,35 @@ class TestReadAll:
 class TestSystemParameters:
     """Testet System-Parameter die spezifische Datentyp-Probleme hatten."""
 
-    def test_hardware_type_nonzero(self, client):
+    @pytest.mark.asyncio
+    async def test_hardware_type_nonzero(self, inverter_ip):
         """Hardware-Typ muss einen plausiblen Wert > 0 liefern."""
-        client.discover()
-        result = client.read_parameters(["hardware_type"])
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            await client.discover()
+            result = await client.read_parameters(["hardware_type"])
         assert "hardware_type" in result, "hardware_type fehlt in Antwort"
         hw = result["hardware_type"]
         assert hw >= 0, f"hardware_type = {hw}, erwartet >= 0"
         print(f"  hardware_type: {hw}")
 
-    def test_latest_event_readable(self, client):
+    @pytest.mark.asyncio
+    async def test_latest_event_readable(self, inverter_ip):
         """Letztes Ereignis muss lesbar sein (0 = kein Fehler)."""
-        client.discover()
-        result = client.read_parameters(["latest_event"])
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            await client.discover()
+            result = await client.read_parameters(["latest_event"])
         assert "latest_event" in result, "latest_event fehlt in Antwort"
         event = result["latest_event"]
         assert event >= 0, f"latest_event = {event}, erwartet >= 0"
         print(f"  latest_event: {event}")
 
-    def test_latest_event_raw_bytes(self, client, inverter_ip):
+    @pytest.mark.asyncio
+    async def test_latest_event_raw_bytes(self, inverter_ip):
         """Zeigt die Roh-Bytes des latest_event für Datentyp-Analyse."""
-        serial = client.discover()
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            serial = await client.discover()
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5.0)
         sock.bind(('', 0))
         try:
             param = TLX_PARAMETERS["latest_event"]
@@ -258,7 +279,7 @@ class TestSystemParameters:
                 MASTER_SERIAL, serial, [param], transaction_no=77,
             )
             sock.sendto(packet, (inverter_ip, ETHERLYNX_PORT))
-            resp, _ = sock.recvfrom(4096)
+            resp = await _recvfrom_async(sock, 4096, 5.0)
 
             # Payload: 4 Byte Header + 4 Byte Param-Header + 4 Byte Value
             payload = resp[ETHERLYNX_HEADER_SIZE:]
@@ -272,12 +293,13 @@ class TestSystemParameters:
         finally:
             sock.close()
 
-    def test_hardware_type_raw_bytes(self, client, inverter_ip):
+    @pytest.mark.asyncio
+    async def test_hardware_type_raw_bytes(self, inverter_ip):
         """Zeigt die Roh-Bytes des hardware_type für Datentyp-Analyse."""
-        serial = client.discover()
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            serial = await client.discover()
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5.0)
         sock.bind(('', 0))
         try:
             param = TLX_PARAMETERS["hardware_type"]
@@ -285,7 +307,7 @@ class TestSystemParameters:
                 MASTER_SERIAL, serial, [param], transaction_no=78,
             )
             sock.sendto(packet, (inverter_ip, ETHERLYNX_PORT))
-            resp, _ = sock.recvfrom(4096)
+            resp = await _recvfrom_async(sock, 4096, 5.0)
 
             payload = resp[ETHERLYNX_HEADER_SIZE:]
             raw_value = payload[8:12]
@@ -304,27 +326,28 @@ class TestSystemParameters:
 class TestProtocolDetails:
     """Detaillierte Protokoll-Tests für Regression."""
 
-    def test_response_data_offset_is_raw(self, inverter_ip):
+    @pytest.mark.asyncio
+    async def test_response_data_offset_is_raw(self, inverter_ip):
         """Response-Header verwendet data_offset als rohen Byte-Wert."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5.0)
         sock.bind(('', 0))
         try:
             sock.sendto(build_ping_packet(), (inverter_ip, ETHERLYNX_PORT))
-            resp, _ = sock.recvfrom(4096)
+            resp = await _recvfrom_async(sock, 4096, 5.0)
             # Inverter sendet 0x0D, nicht 0x68
             assert resp[36] == 0x0D
         finally:
             sock.close()
 
-    def test_parameter_values_are_big_endian(self, client, inverter_ip):
+    @pytest.mark.asyncio
+    async def test_parameter_values_are_big_endian(self, inverter_ip):
         """Parameterwerte werden als Big-Endian zurückgegeben."""
-        serial = client.discover()
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            serial = await client.discover()
         assert serial is not None
 
         # Lese grid_frequency_avg — Wert muss ~50000 mHz sein
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5.0)
         sock.bind(('', 0))
         try:
             param = TLX_PARAMETERS["grid_frequency_avg"]
@@ -332,7 +355,7 @@ class TestProtocolDetails:
                 MASTER_SERIAL, serial, [param], transaction_no=42,
             )
             sock.sendto(packet, (inverter_ip, ETHERLYNX_PORT))
-            resp, _ = sock.recvfrom(4096)
+            resp = await _recvfrom_async(sock, 4096, 5.0)
 
             # Payload ab Byte 52, Parameter-Entry ab Byte 56
             raw_value = resp[ETHERLYNX_HEADER_SIZE + 4 + 4:
@@ -352,12 +375,13 @@ class TestProtocolDetails:
         finally:
             sock.close()
 
-    def test_response_num_params_in_first_byte(self, client, inverter_ip):
+    @pytest.mark.asyncio
+    async def test_response_num_params_in_first_byte(self, inverter_ip):
         """Response hat num_params im ersten Byte der Payload."""
-        serial = client.discover()
+        async with DanfossEtherLynx(inverter_ip, timeout=5.0) as client:
+            serial = await client.discover()
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5.0)
         sock.bind(('', 0))
         try:
             params = [
@@ -369,7 +393,7 @@ class TestProtocolDetails:
                 MASTER_SERIAL, serial, params, transaction_no=99,
             )
             sock.sendto(packet, (inverter_ip, ETHERLYNX_PORT))
-            resp, _ = sock.recvfrom(4096)
+            resp = await _recvfrom_async(sock, 4096, 5.0)
 
             payload = resp[ETHERLYNX_HEADER_SIZE:]
             # Erstes Byte = Anzahl Parameter

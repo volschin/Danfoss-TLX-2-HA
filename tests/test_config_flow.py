@@ -52,6 +52,10 @@ class TestDanfossConfigFlow:
                 CONF_SCAN_INTERVAL: 15,
             })
 
+            # Unique-ID-Schutz muss greifen: discover-Seriennummer als ID
+            flow.async_set_unique_id.assert_awaited_once_with("danfoss_tlx_SER_FOUND")
+            flow._abort_if_unique_id_configured.assert_called_once_with()
+
             flow.async_create_entry.assert_called_once()
             call_kwargs = flow.async_create_entry.call_args[1]
             assert call_kwargs["data"][CONF_INVERTER_IP] == "192.168.1.100"
@@ -78,9 +82,41 @@ class TestDanfossConfigFlow:
             })
 
             mock_client.discover.assert_not_called()
+            # Unique-ID basiert auf der bekannten Seriennummer
+            flow.async_set_unique_id.assert_awaited_once_with("danfoss_tlx_KNOWN_SER")
+            flow._abort_if_unique_id_configured.assert_called_once_with()
             flow.async_create_entry.assert_called_once()
             call_kwargs = flow.async_create_entry.call_args[1]
             assert call_kwargs["data"][CONF_INVERTER_SERIAL] == "KNOWN_SER"
+
+    @pytest.mark.asyncio
+    async def test_duplicate_entry_aborts(self, mock_hass):
+        """Ein bereits konfigurierter Inverter (gleicher Unique-ID) führt zum Abort."""
+        from homeassistant.data_entry_flow import AbortFlow
+
+        with patch("custom_components.danfoss_tlx.config_flow.DanfossEtherLynx") as mock_cls:
+            mock_client = _make_mock_client(discover_return="SER_FOUND")
+            mock_cls.return_value = mock_client
+
+            flow = DanfossConfigFlow()
+            flow.hass = mock_hass
+            flow.async_set_unique_id = AsyncMock()
+            # Simuliere: Unique-ID bereits konfiguriert → AbortFlow
+            flow._abort_if_unique_id_configured = MagicMock(
+                side_effect=AbortFlow("already_configured")
+            )
+            flow.async_create_entry = MagicMock()
+
+            with pytest.raises(AbortFlow):
+                await flow.async_step_user({
+                    CONF_INVERTER_IP: "192.168.1.100",
+                    CONF_INVERTER_SERIAL: "",
+                    CONF_PV_STRINGS: 2,
+                    CONF_SCAN_INTERVAL: 15,
+                })
+
+            # Bei Duplikat darf kein Entry erzeugt werden
+            flow.async_create_entry.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_connection_failure_discover_returns_none(self, mock_hass):
@@ -307,22 +343,32 @@ class TestDanfossConfigFlowErrors:
             assert result["errors"]["base"] == "cannot_read_parameters"
 
 
+class _OptionsFlowForTest(DanfossOptionsFlow):
+    """Test-Subklasse: stellt config_entry über das Konstruktor-Argument bereit.
+
+    Vermeidet die Klassen-Mutation `type(flow).config_entry = property(...)`,
+    die sonst in andere Tests überlaufen würde.
+    """
+
+    def __init__(self, entry):
+        self._test_entry = entry
+
+    @property
+    def config_entry(self):
+        return self._test_entry
+
+
 class TestDanfossOptionsFlow:
     @pytest.mark.asyncio
     async def test_shows_form_with_defaults(self, mock_config_entry):
-        flow = DanfossOptionsFlow()
-        flow._config_entry = mock_config_entry
-        # OptionsFlow greift über self.config_entry zu; setzen wir als Property
-        type(flow).config_entry = property(lambda self: self._config_entry)
+        flow = _OptionsFlowForTest(mock_config_entry)
         result = await flow.async_step_init(None)
         assert result["type"] == "form"
         assert result["step_id"] == "init"
 
     @pytest.mark.asyncio
     async def test_saves_updates(self, mock_config_entry):
-        flow = DanfossOptionsFlow()
-        flow._config_entry = mock_config_entry
-        type(flow).config_entry = property(lambda self: self._config_entry)
+        flow = _OptionsFlowForTest(mock_config_entry)
         flow.async_create_entry = MagicMock(return_value={"type": "create_entry"})
 
         await flow.async_step_init({
@@ -334,3 +380,8 @@ class TestDanfossOptionsFlow:
             title="",
             data={CONF_SCAN_INTERVAL: 30, CONF_PV_STRINGS: 3},
         )
+
+    def test_base_class_property_not_mutated(self):
+        """Sicherheitsnetz: DanfossOptionsFlow.config_entry darf keine eingepflanzte Property haben."""
+        # config_entry kommt aus der HA-Basisklasse, nicht aus DanfossOptionsFlow oder Tests
+        assert "config_entry" not in DanfossOptionsFlow.__dict__

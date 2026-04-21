@@ -34,14 +34,16 @@ Danfoss-TLX-2-HA/
 │       ├── strings.json             # German UI strings (config, exceptions, entities)
 │       ├── icons.json               # MDI icon translations for all sensor entities
 │       ├── quality_scale.yaml       # HA Quality Scale Gold declaration
-│       ├── etherlynx.py             # EtherLynx protocol library (copied from root)
+│       ├── etherlynx.py             # EtherLynx protocol library
 │       ├── py.typed                 # PEP 561 type marker (Platinum requirement)
 │       ├── brand/
 │       │   ├── icon.png             # HACS brand icon (256×256)
 │       │   └── logo.png             # HACS brand logo (256×256)
 │       └── translations/
 │           └── en.json              # English UI translations (config, exceptions, entities)
-├── tests/                           # pytest test suite (~152 tests, 97% coverage)
+├── dashboards/
+│   └── danfoss-tlx-inverter.yaml    # Example Home Assistant dashboard
+├── tests/                           # pytest test suite (~169 tests, 95% coverage)
 │   ├── __init__.py
 │   ├── conftest.py                  # Shared fixtures (mock_hass, mock_config_entry, etc.)
 │   ├── test_etherlynx.py            # Protocol library tests (~58 tests)
@@ -77,7 +79,7 @@ Danfoss-TLX-2-HA/
 Integration entry point. Calls `async_setup_entry` and `async_unload_entry`. Registers the `sensor` platform and sets up a listener to reload when options change.
 
 #### `manifest.json`
-HA integration manifest. Required fields: `domain`, `name`, `version`, `iot_class`, `config_flow`, `codeowners`, `documentation`, `issue_tracker`. Includes `quality_scale: "gold"` and `single_config_entry: false`. No external `requirements` — the protocol library is stdlib-only. **Important**: keys must be ordered as `domain`, `name`, then remaining keys alphabetically (enforced by hassfest).
+HA integration manifest. Required fields: `domain`, `name`, `version`, `iot_class`, `config_flow`, `codeowners`, `documentation`, `issue_tracker`. Includes `quality_scale: "platinum"` and `single_config_entry: false`. No external `requirements` — the protocol library is stdlib-only. **Important**: keys must be ordered as `domain`, `name`, then remaining keys alphabetically (enforced by hassfest).
 
 #### `const.py`
 All shared constants: `DOMAIN = "danfoss_tlx"`, `CONF_*` config keys, default values.
@@ -97,10 +99,10 @@ All shared constants: `DOMAIN = "danfoss_tlx"`, `CONF_*` config keys, default va
 - All sensors share a single HA device entry keyed by `(DOMAIN, entry.entry_id)`
 
 #### `diagnostics.py`
-Diagnostics platform for the Gold quality scale. Returns config data (serial redacted), coordinator state, and latest inverter readings via `async_get_config_entry_diagnostics`.
+Diagnostics platform for the Platinum quality scale. Returns config data (serial redacted), coordinator state, and latest inverter readings via `async_get_config_entry_diagnostics`.
 
 #### `quality_scale.yaml`
-Declares compliance with all Bronze, Silver, Gold, and Platinum quality scale rules. Rules that don't apply (discovery, reauthentication, actions, stale-devices, inject-websession) are marked as `exempt` with German comments.
+Platinum quality scale declaration. Declares compliance with all Bronze, Silver, Gold, and Platinum rules. Rules that don't apply (discovery, reauthentication, actions, stale-devices, inject-websession) are marked as `exempt` with German comments.
 
 #### `etherlynx.py`
 The EtherLynx protocol library. Self-contained inside the component package so HACS installs everything in one directory.
@@ -110,7 +112,7 @@ The EtherLynx protocol library. Self-contained inside the component package so H
 - `Flag` class — Bitmask constants for the protocol header flags field
 - `DataType` enum — 12 numeric data type variants (BOOLEAN, SIGNED32, UNSIGNED32, FLOAT, etc.)
 - `ParameterDef` dataclass — Descriptor for each inverter parameter: Danfoss parameter ID, unit, scale factor, HA `device_class`
-- `TLX_PARAMETERS` dict — Registry of ~40 readable inverter parameters keyed by a snake_case name (e.g. `grid_power_total`, `pv_voltage_1`)
+- `TLX_PARAMETERS` dict — Registry of ~50 readable inverter parameters keyed by a snake_case name (e.g. `grid_power_total`, `pv_voltage_1`)
 - `_EtherLynxProtocol` class — asyncio `DatagramProtocol` for non-blocking UDP communication; matches requests to responses via a `Future`
 - `DanfossEtherLynx` class — Async main client; uses `_EtherLynxProtocol` via `create_datagram_endpoint`; all public methods are `async def`
 - Module-level helpers: `build_ping_packet()`, `build_get_parameters_packet()`, `parse_ping_response()`, `parse_parameter_response()`
@@ -132,6 +134,8 @@ MDI icon definitions for all 52 sensor entities under `entity.sensor.<key>.defau
 
 ### Language
 All comments, docstrings, variable descriptions, and user-facing messages are written in **German**. Keep this convention when adding new code.
+
+GitHub release notes are written in **English**.
 
 ### Naming
 | Construct | Convention | Example |
@@ -225,7 +229,7 @@ When adding new parameters, follow this pattern exactly and include the Danfoss 
 
 ## Testing
 
-The project has a pytest-based test suite with ~165 tests and 95% code coverage.
+The project has a pytest-based test suite with ~169 tests and 95% code coverage.
 
 ### Running tests
 ```bash
@@ -237,12 +241,12 @@ pytest --cov=custom_components.danfoss_tlx --cov-report=term-missing
 
 ### Test structure
 - **`tests/conftest.py`** — Shared fixtures: `mock_hass`, `mock_config_entry`, `sample_inverter_data`, `make_ping_response`, `make_parameter_response`, `_make_mock_client` (async context manager helper)
-- **`tests/test_etherlynx.py`** — Protocol library: packet building/parsing, socket mocking, registry validation
-- **`tests/test_coordinator.py`** — DataUpdateCoordinator: discovery, serial handling, error recovery
-- **`tests/test_sensor.py`** — Sensor entities: value mapping, PV string filtering, device info
-- **`tests/test_config_flow.py`** — Config/options flows: form rendering, connection testing, error handling
-- **`tests/test_diagnostics.py`** — Diagnostics: config entry diagnostics, serial redaction, null data handling
-- **`tests/test_init.py`** — Integration setup/unload, platform forwarding
+- **`tests/test_etherlynx.py`** — Protocol library: packet building/parsing, socket mocking, registry validation (~87 tests)
+- **`tests/test_coordinator.py`** — DataUpdateCoordinator: discovery, serial handling, error recovery (~14 tests)
+- **`tests/test_sensor.py`** — Sensor entities: value mapping, PV string filtering, device info (~34 tests)
+- **`tests/test_config_flow.py`** — Config/options flows: form rendering, connection testing, error handling (~19 tests)
+- **`tests/test_diagnostics.py`** — Diagnostics: config entry diagnostics, serial redaction, null data handling (~9 tests)
+- **`tests/test_init.py`** — Integration setup/unload, platform forwarding (~6 tests)
 - **`tests/test_e2e_inverter.py`** — End-to-end tests against a real inverter; skipped unless `INVERTER_IP` env var is set. Run with: `INVERTER_IP=x.x.x.x pytest tests/test_e2e_inverter.py -v -s`
 
 ### Writing tests
@@ -279,6 +283,7 @@ PR labels control version bumping and changelog categories:
 - The README is the primary user documentation and is written in German; keep it in sync with any behavioral changes.
 - The included PDF (`ComLynx and EtherLynx User Guide.pdf`) is the authoritative reference for all protocol details. Consult it before modifying packet structure.
 - Run `ruff check` before committing; CI enforces clean linting.
+- **Update `CLAUDE.md` at the end of every change** — keep file paths, test counts, version-sensitive descriptions, and conventions in sync with the actual code.
 
 ---
 

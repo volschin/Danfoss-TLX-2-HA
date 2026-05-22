@@ -13,7 +13,7 @@ from .const import DOMAIN, CONF_PV_STRINGS, DEFAULT_PV_STRINGS
 from .coordinator import DanfossCoordinator
 from .etherlynx import TLX_PARAMETERS, get_operation_mode_text, get_event_text, ParameterDef
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from . import DanfossTLXConfigEntry
 
 # Sensor-Updates werden vom Coordinator koordiniert

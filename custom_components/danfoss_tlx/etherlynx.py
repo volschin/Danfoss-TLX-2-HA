@@ -832,7 +832,7 @@ def _parse_value(
         else:
             # Fallback: unsigned 32
             return float(struct.unpack('>I', raw)[0])
-    except struct.error as e:
+    except struct.error as e:  # pragma: no cover
         logger.error(f"Struct-Fehler beim Parsen: {e}")
         return None
 
@@ -1100,7 +1100,7 @@ class DanfossEtherLynx:
 # ============================================================================
 
 
-async def _async_main(args: Any) -> int:
+async def _async_main(args: Any) -> int:  # pragma: no cover
     """Async-Hauptfunktion für das Kommandozeilen-Tool."""
     async with DanfossEtherLynx(args.ip, timeout=args.timeout) as client:
         # Seriennummer setzen oder Discovery

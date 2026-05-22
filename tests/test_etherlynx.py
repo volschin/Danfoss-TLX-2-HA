@@ -793,6 +793,36 @@ class TestEtherLynxProtocolEdgeCases:
         result = await protocol.send_receive(b"request", timeout=0.01)
         assert result is None
 
+    def test_datagram_received_when_future_already_done(self):
+        """datagram_received ignoriert Daten wenn Future bereits abgeschlossen."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        loop = asyncio.new_event_loop()
+        try:
+            future = loop.create_future()
+            future.set_result(b"already done")
+            protocol._response_future = future
+            # Must not raise even though future is already resolved
+            protocol.datagram_received(b"late data", ("127.0.0.1", 48004))
+            assert future.result() == b"already done"
+        finally:
+            loop.close()
+
+    def test_error_received_when_future_already_done(self):
+        """error_received ignoriert Fehler wenn Future bereits abgeschlossen."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        loop = asyncio.new_event_loop()
+        try:
+            future = loop.create_future()
+            future.set_result(b"already done")
+            protocol._response_future = future
+            # Must not raise even though future is already resolved
+            protocol.error_received(OSError("too late"))
+            assert future.result() == b"already done"
+        finally:
+            loop.close()
+
 
 class TestParseValueEdgeCases:
     """Tests für Grenzfälle in _parse_value."""
@@ -828,6 +858,32 @@ class TestParseParameterResponseEdgeCases:
 
 class TestDanfossEtherLynxEdgeCases:
     """Tests für Grenzfälle im EtherLynx-Protokoll."""
+
+    @pytest.mark.asyncio
+    async def test_get_connection_reuses_existing_transport(self):
+        """_get_connection öffnet keine neue Verbindung wenn Transport bereits aktiv."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        mock_transport = MagicMock()
+        mock_transport.is_closing.return_value = False
+        mock_protocol = MagicMock(spec=_EtherLynxProtocol)
+
+        client = DanfossEtherLynx("192.168.1.100")
+        client._transport = mock_transport
+        client._protocol = mock_protocol
+
+        result = await client._get_connection()
+        assert result is mock_protocol
+        mock_transport.is_closing.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_discover_response_without_valid_serial(self):
+        """discover gibt None zurück wenn Antwort empfangen aber Serial nicht erkannt."""
+        with patch("custom_components.danfoss_tlx.etherlynx.parse_ping_response", return_value=None):
+            client = DanfossEtherLynx("192.168.1.100")
+            with patch.object(client, "_send_receive_async", AsyncMock(return_value=b"invalid")):
+                serial = await client.discover()
+        assert serial is None
+        assert client.inverter_serial is None
 
     def test_parse_parameter_response_param_count_mismatch(self, make_parameter_response):
         """parse_parameter_response: Anzahl-Mismatch wird toleriert."""

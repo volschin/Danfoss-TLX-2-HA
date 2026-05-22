@@ -172,6 +172,28 @@ class TestDanfossSensor:
         """PARALLEL_UPDATES muss 0 sein (Coordinator-basiert)."""
         assert PARALLEL_UPDATES == 0
 
+    def test_available_when_coordinator_unavailable(self, mock_config_entry):
+        """available gibt False zurück wenn Coordinator nicht verfügbar ist."""
+        coordinator = MagicMock()
+        coordinator.last_update_success = False
+        coordinator.data = {"ambient_temp": 25.0}
+        param = TLX_PARAMETERS["ambient_temp"]
+        sensor = DanfossSensor(coordinator, mock_config_entry, "ambient_temp", param)
+        assert sensor.available is False
+
+    def test_available_non_temp_sensor(self, mock_coordinator, mock_config_entry):
+        """Nicht-Temperatursensor gibt available=True zurück."""
+        param = TLX_PARAMETERS["grid_power_total"]
+        sensor = DanfossSensor(mock_coordinator, mock_config_entry, "grid_power_total", param)
+        assert sensor.available is True
+
+    def test_device_info_property(self, mock_coordinator, mock_config_entry):
+        """device_info Property gibt DeviceInfo zurück."""
+        param = TLX_PARAMETERS["grid_power_total"]
+        sensor = DanfossSensor(mock_coordinator, mock_config_entry, "grid_power_total", param)
+        info = sensor.device_info
+        assert (DOMAIN, mock_config_entry.entry_id) in info["identifiers"]
+
 
 class TestDanfossOperationModeSensor:
     def test_maps_mode_60_on_grid(self, mock_coordinator, mock_config_entry):
@@ -213,6 +235,13 @@ class TestDanfossOperationModeSensor:
         """OperationModeSensor hat EntityCategory.DIAGNOSTIC."""
         sensor = DanfossOperationModeSensor(mock_coordinator, mock_config_entry)
         assert sensor._attr_entity_category == EntityCategory.DIAGNOSTIC
+
+    def test_no_operation_mode_key_in_data(self, mock_config_entry):
+        """native_value gibt None zurück wenn operation_mode nicht in data vorhanden."""
+        coordinator = MagicMock()
+        coordinator.data = {"grid_power_total": 1000.0}
+        sensor = DanfossOperationModeSensor(coordinator, mock_config_entry)
+        assert sensor.native_value is None
 
 
 class TestDanfossEventSensor:
@@ -257,6 +286,13 @@ class TestDanfossEventSensor:
         sensor = DanfossEventSensor(mock_coordinator, mock_config_entry)
         assert sensor._attr_entity_category == EntityCategory.DIAGNOSTIC
 
+    def test_no_latest_event_key_in_data(self, mock_config_entry):
+        """native_value gibt None zurück wenn latest_event nicht in data vorhanden."""
+        coordinator = MagicMock()
+        coordinator.data = {"grid_power_total": 1000.0}
+        sensor = DanfossEventSensor(coordinator, mock_config_entry)
+        assert sensor.native_value is None
+
 
 class TestDeviceInfo:
     def test_with_serial(self, mock_coordinator, mock_config_entry):
@@ -273,4 +309,22 @@ class TestDeviceInfo:
         assert mock_config_entry.entry_id in info["name"]
         assert info["serial_number"] is None
         assert info["sw_version"] is None
+        assert info["hw_version"] is None
+
+    def test_partial_data_hw_version_only(self, mock_config_entry):
+        """_device_info mit data ohne sw_version-Schlüssel."""
+        coordinator = MagicMock()
+        coordinator.data = {"hardware_type": 7.0}
+        coordinator.inverter_serial = "TLX123456"
+        info = _device_info(coordinator, mock_config_entry)
+        assert info["sw_version"] is None
+        assert info["hw_version"] == "7"
+
+    def test_partial_data_sw_version_only(self, mock_config_entry):
+        """_device_info mit data ohne hardware_type-Schlüssel."""
+        coordinator = MagicMock()
+        coordinator.data = {"sw_version": 3.45}
+        coordinator.inverter_serial = "TLX123456"
+        info = _device_info(coordinator, mock_config_entry)
+        assert info["sw_version"] == "3.45"
         assert info["hw_version"] is None

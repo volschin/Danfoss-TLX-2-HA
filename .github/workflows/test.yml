@@ -40,9 +40,6 @@ jobs:
       - name: Run tests with coverage
         run: pytest --cov=custom_components.danfoss_tlx --cov-branch --cov-report=xml --cov-report=term-missing --cov-fail-under=95 -v
 
-      #- name: Run tests
-      #  run: pytest --cov --cov-branch --cov-report=xml
-
       - name: Upload results to Codecov
         uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
         with:

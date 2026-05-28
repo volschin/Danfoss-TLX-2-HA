@@ -15,14 +15,19 @@ Lizenz: MIT
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import struct
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
+
+
+class EtherLynxError(Exception):
+    """Fehler bei der EtherLynx-Kommunikation (z.B. ausbleibende Antwort)."""
 
 # ============================================================================
 # Protokoll-Konstanten (aus Danfoss EtherLynx User Guide, Kapitel 5)
@@ -689,6 +694,31 @@ def build_get_parameters_packet(
     return header + bytes(data)
 
 
+def _response_matches(
+    data: bytes,
+    expected_message_id: int,
+    expected_transaction: int,
+) -> bool:
+    """Prüft, ob ein empfangenes Datagramm zur gesendeten Anfrage gehört.
+
+    Korreliert anhand der Header-Felder (Kapitel 5.1): Das Response-Bit muss
+    gesetzt sein, Message ID (Byte 39) und Transaktionsnummer (Byte 38) müssen
+    mit der Anfrage übereinstimmen. Laut Spezifikation spiegelt der Inverter die
+    Transaktionsnummer in der Antwort (Beispiel Kapitel 6.4.2: Request 0x4A →
+    Response 0x4A). Dadurch werden verspätete, doppelte oder fremde Pakete
+    verworfen, statt sie der falschen Anfrage zuzuordnen.
+    """
+    if len(data) < ETHERLYNX_HEADER_SIZE:
+        return False
+    if not (data[37] & Flag.RESPONSE):
+        return False
+    if data[39] != (expected_message_id & 0xFF):
+        return False
+    if data[38] != (expected_transaction & 0xFF):
+        return False
+    return True
+
+
 def parse_ping_response(data: bytes) -> str | None:
     """Parst eine Ping-Response und extrahiert die Inverter-Seriennummer.
 
@@ -765,6 +795,27 @@ def parse_parameter_response(
         param_index = payload[offset + 2]
         param_subindex = payload[offset + 3]
         raw_value = payload[offset + 4: offset + 8]
+
+        # Parameter-Identität gegen die Anfrage prüfen. Die Response hat laut
+        # Kapitel 5.4.2.2 dieselbe Struktur inkl. Index/Subindex wie der Request.
+        # Stimmt sie nicht überein, ist die positionsbasierte Zuordnung nicht
+        # vertrauenswürdig → Wert verwerfen statt einen falschen Wert zu melden.
+        if (
+            param_index != (param_def.index & 0xFF)
+            or param_subindex != (param_def.subindex & 0xFF)
+        ):
+            logger.warning(
+                "Parameter-Identität weicht ab für %s: erwartet "
+                "Index=%#x/Sub=%#x, erhielt Index=%#x/Sub=%#x",
+                param_def.name,
+                param_def.index & 0xFF,
+                param_def.subindex & 0xFF,
+                param_index,
+                param_subindex,
+            )
+            results[key] = None
+            offset += 8
+            continue
 
         # Prüfe Error-Bit im Attributes-Byte
         error_bit = attr_byte & 0x01
@@ -846,47 +897,67 @@ class _EtherLynxProtocol(asyncio.DatagramProtocol):
     """Asyncio DatagramProtocol für EtherLynx-UDP-Kommunikation."""
 
     def __init__(self) -> None:
-        self._response_future: asyncio.Future[bytes] | None = None
         self.transport: asyncio.DatagramTransport | None = None
+        # Empfangene Datagramme (oder Transportfehler) werden gepuffert, damit
+        # send_receive nicht passende Pakete verwerfen und weiter warten kann.
+        self._queue: asyncio.Queue[bytes | Exception] = asyncio.Queue()
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Transport-Verbindung hergestellt."""
         self.transport = transport  # type: ignore[assignment]
 
     def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
-        """Empfangenes UDP-Datagramm an wartenden Aufrufer weiterleiten."""
-        if self._response_future and not self._response_future.done():
-            self._response_future.set_result(data)
+        """Empfangenes UDP-Datagramm puffern."""
+        self._queue.put_nowait(data)
 
     def error_received(self, exc: Exception) -> None:
-        """Transport-Fehler an wartenden Aufrufer weiterleiten."""
-        if self._response_future and not self._response_future.done():
-            self._response_future.set_exception(exc)
+        """Transport-Fehler puffern."""
+        self._queue.put_nowait(exc)
 
     def connection_lost(self, exc: Exception | None) -> None:
         """Verbindung geschlossen."""
 
-    async def send_receive(self, data: bytes, timeout: float) -> bytes | None:
-        """Sendet ein Datagramm und wartet auf die Antwort.
+    async def send_receive(
+        self,
+        data: bytes,
+        timeout: float,
+        validate: Callable[[bytes], bool] | None = None,
+    ) -> bytes | None:
+        """Sendet ein Datagramm und wartet auf die passende Antwort.
 
-        Gibt None zurück wenn kein Datagramm innerhalb von timeout empfangen.
+        Verwirft Datagramme, die ``validate`` nicht akzeptiert (verspätete,
+        doppelte oder fremde Pakete), und wartet innerhalb von ``timeout``
+        weiter. Gibt None zurück bei Timeout oder Transportfehler.
         """
         if self.transport is None:
             raise RuntimeError("send_receive aufgerufen ohne aktive Verbindung")
-        self._response_future = asyncio.get_running_loop().create_future()
+
+        # Veraltete Datagramme aus einem früheren Aufruf verwerfen.
+        while not self._queue.empty():
+            self._queue.get_nowait()
+
         self.transport.sendto(data)
-        try:
-            return await asyncio.wait_for(self._response_future, timeout=timeout)
-        except asyncio.TimeoutError:
-            logger.warning(
-                "Timeout beim Warten auf Antwort (%.1f s)", timeout
-            )
-            return None
-        except OSError as exc:
-            logger.error("Socket-Fehler: %s", exc)
-            return None
-        finally:
-            self._response_future = None
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                logger.warning("Timeout beim Warten auf Antwort (%.1f s)", timeout)
+                return None
+            try:
+                item = await asyncio.wait_for(self._queue.get(), timeout=remaining)
+            except asyncio.TimeoutError:
+                logger.warning("Timeout beim Warten auf Antwort (%.1f s)", timeout)
+                return None
+            if isinstance(item, Exception):
+                logger.error("Socket-Fehler: %s", item)
+                return None
+            if validate is not None and not validate(item):
+                logger.debug(
+                    "Verwerfe nicht zugeordnetes Datagramm (%d Bytes)", len(item)
+                )
+                continue
+            return item
 
 
 # ============================================================================
@@ -936,10 +1007,24 @@ class DanfossEtherLynx:
         packet: bytes,
         timeout: float | None = None,
     ) -> bytes | None:
-        """Sendet UDP-Paket und wartet auf Antwort."""
+        """Sendet UDP-Paket und wartet auf die zugehörige Antwort.
+
+        Der Validator wird aus dem gesendeten Paket abgeleitet (Message ID in
+        Byte 39, Transaktionsnummer in Byte 38), sodass nur die korrelierte
+        Antwort akzeptiert wird.
+        """
         protocol = await self._get_connection()
+        validate: Callable[[bytes], bool] | None = None
+        if len(packet) >= ETHERLYNX_HEADER_SIZE:
+            validate = functools.partial(
+                _response_matches,
+                expected_message_id=packet[39],
+                expected_transaction=packet[38],
+            )
         return await protocol.send_receive(
-            packet, timeout=self.timeout if timeout is None else timeout
+            packet,
+            timeout=self.timeout if timeout is None else timeout,
+            validate=validate,
         )
 
     def _next_transaction(self) -> int:
@@ -1024,22 +1109,24 @@ class DanfossEtherLynx:
         for batch_start in range(0, len(params), max_per_request):
             batch = params[batch_start : batch_start + max_per_request]
 
-            packet = build_get_parameters_packet(
-                source_serial=self.master_serial,
-                dest_serial=self._inverter_serial,  # type: ignore[arg-type]
-                parameters=[pdef for _, pdef in batch],
-                transaction_no=self._next_transaction(),
-            )
-
-            response = await self._send_receive_async(packet)
+            # Ein erneuter Versuch, bevor der Batch als endgültig fehlgeschlagen
+            # gilt (deckt vereinzelten UDP-Paketverlust ab). Die Transaktions-
+            # nummer bleibt beim Retry gleich (Spec §5.1: wird bei erneutem
+            # Senden NICHT inkrementiert) — so kann auch eine nur verspätete
+            # erste Antwort dem zweiten Versuch zugeordnet werden.
+            transaction_no = self._next_transaction()
+            response = await self._read_batch(batch, transaction_no)
+            if response is None:
+                response = await self._read_batch(batch, transaction_no)
 
             if response is None:
-                logger.warning(
-                    "Keine Antwort für Batch %s-%s",
-                    batch_start,
-                    batch_start + len(batch),
+                # Lautes Scheitern: eine unvollständige Antwort darf nicht als
+                # erfolgreiche Aktualisierung mit fehlenden Werten durchgehen.
+                raise EtherLynxError(
+                    f"Keine Antwort für Parameter-Batch "
+                    f"{batch_start}-{batch_start + len(batch)} "
+                    f"von {self.inverter_ip}"
                 )
-                continue
 
             results = parse_parameter_response(response, batch)
             all_results.update(results)
@@ -1048,6 +1135,20 @@ class DanfossEtherLynx:
                 await asyncio.sleep(0.1)
 
         return all_results
+
+    async def _read_batch(
+        self,
+        batch: list[tuple[str, ParameterDef]],
+        transaction_no: int,
+    ) -> bytes | None:
+        """Sendet einen Parameter-Batch und gibt die rohe Antwort zurück."""
+        packet = build_get_parameters_packet(
+            source_serial=self.master_serial,
+            dest_serial=self._inverter_serial,  # type: ignore[arg-type]
+            parameters=[pdef for _, pdef in batch],
+            transaction_no=transaction_no,
+        )
+        return await self._send_receive_async(packet)
 
     async def read_all(self) -> dict[str, Any]:
         """Liest alle definierten Parameter vom Inverter."""

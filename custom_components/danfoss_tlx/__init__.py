@@ -32,8 +32,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: DanfossTLXConfigEntry) -
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: DanfossTLXConfigEntry) -> bool:
-    """Entfernt die Integration."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    """Entfernt die Integration und schließt den UDP-Endpoint."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        await entry.runtime_data.async_shutdown()
+    return unload_ok
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: DanfossTLXConfigEntry) -> None:

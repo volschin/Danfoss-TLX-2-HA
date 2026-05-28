@@ -51,6 +51,7 @@ class TestIntegrationSetup:
         # Setup first
         mock_coordinator = MagicMock()
         mock_coordinator.async_config_entry_first_refresh = AsyncMock()
+        mock_coordinator.async_shutdown = AsyncMock()
         mock_coordinator_cls.return_value = mock_coordinator
         await async_setup_entry(mock_hass, mock_config_entry)
 
@@ -62,6 +63,8 @@ class TestIntegrationSetup:
         mock_hass.config_entries.async_unload_platforms.assert_awaited_once_with(
             mock_config_entry, PLATFORMS
         )
+        # UDP-Endpoint muss beim Unload geschlossen werden (kein Socket-Leck)
+        mock_coordinator.async_shutdown.assert_awaited_once_with()
 
     @pytest.mark.asyncio
     async def test_unload_entry_returns_false_when_platforms_fail(

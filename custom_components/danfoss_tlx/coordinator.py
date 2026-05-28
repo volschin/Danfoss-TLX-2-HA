@@ -48,6 +48,16 @@ class DanfossCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Seriennummer des Inverters."""
         return self._inverter_serial
 
+    async def async_shutdown(self) -> None:
+        """Beendet den Coordinator und schließt den UDP-Endpoint.
+
+        Verhindert ein Leck des Datagram-Transports bei Unload/Reload.
+        """
+        await super().async_shutdown()
+        if self._client is not None:
+            await self._client.close()
+            self._client = None
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Holt Daten vom Inverter."""
         try:

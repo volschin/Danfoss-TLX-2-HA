@@ -22,6 +22,8 @@ from custom_components.danfoss_tlx.etherlynx import (
     build_get_parameters_packet,
     parse_ping_response,
     parse_parameter_response,
+    _response_matches,
+    EtherLynxError,
 )
 
 
@@ -69,6 +71,80 @@ class TestEtherLynxProtocol:
         asyncio.create_task(inject_error())
         result = await protocol.send_receive(b"ping", timeout=1.0)
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_send_receive_drops_non_matching_datagram(self):
+        """Ein nicht passendes Datagramm wird verworfen, das passende geliefert.
+
+        Deckt den Korrelationspfad ab, den die gemockten read_*-Tests nicht
+        durchlaufen (verspätete/fremde Pakete dürfen nicht falsch zugeordnet
+        werden).
+        """
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        protocol.connection_made(MagicMock())
+
+        async def deliver():
+            await asyncio.sleep(0)
+            protocol.datagram_received(b"WRONG", ("127.0.0.1", 48004))
+            protocol.datagram_received(b"RIGHT", ("127.0.0.1", 48004))
+
+        asyncio.create_task(deliver())
+        result = await protocol.send_receive(
+            b"req", timeout=1.0, validate=lambda d: d == b"RIGHT"
+        )
+        assert result == b"RIGHT"
+
+    @pytest.mark.asyncio
+    async def test_send_receive_times_out_when_only_non_matching(self):
+        """Kommen nur nicht passende Datagramme, läuft der Timeout ab → None."""
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
+        protocol = _EtherLynxProtocol()
+        protocol.connection_made(MagicMock())
+
+        async def deliver():
+            await asyncio.sleep(0)
+            protocol.datagram_received(b"WRONG", ("127.0.0.1", 48004))
+
+        asyncio.create_task(deliver())
+        result = await protocol.send_receive(
+            b"req", timeout=0.05, validate=lambda d: d == b"RIGHT"
+        )
+        assert result is None
+
+
+# ============================================================================
+# _response_matches Tests
+# ============================================================================
+
+
+class TestResponseMatches:
+    def _resp(self, message_id: int, transaction: int, response: bool = True) -> bytes:
+        header = bytearray(ETHERLYNX_HEADER_SIZE)
+        if response:
+            header[37] = Flag.RESPONSE
+        header[38] = transaction
+        header[39] = message_id
+        return bytes(header)
+
+    def test_matches_when_msgid_and_transaction_echo(self):
+        data = self._resp(MessageID.GET_SET_PARAMETER, 0x4A)
+        assert _response_matches(data, MessageID.GET_SET_PARAMETER, 0x4A) is True
+
+    def test_rejects_wrong_transaction(self):
+        data = self._resp(MessageID.GET_SET_PARAMETER, 0x4A)
+        assert _response_matches(data, MessageID.GET_SET_PARAMETER, 0x4B) is False
+
+    def test_rejects_wrong_message_id(self):
+        data = self._resp(MessageID.PING, 0x01)
+        assert _response_matches(data, MessageID.GET_SET_PARAMETER, 0x01) is False
+
+    def test_rejects_request_packet(self):
+        data = self._resp(MessageID.GET_SET_PARAMETER, 0x4A, response=False)
+        assert _response_matches(data, MessageID.GET_SET_PARAMETER, 0x4A) is False
+
+    def test_rejects_too_short(self):
+        assert _response_matches(b"\x00" * 10, MessageID.PING, 0) is False
 
 
 # ============================================================================
@@ -324,6 +400,20 @@ class TestParseParameterResponse:
         result = parse_parameter_response(response, [("grid_power_total", param)])
         assert "grid_power_total" not in result
 
+    def test_identity_mismatch_yields_none(self, make_parameter_response):
+        """Echo-Index/Subindex ≠ angefragter Parameter → Wert wird verworfen.
+
+        Schützt gegen positionsbasierte Fehlzuordnung bei korruptem/fremdem
+        Paket, das dennoch korrekt korreliert (Defense-in-Depth).
+        """
+        sent = TLX_PARAMETERS["operation_mode"]
+        expected = TLX_PARAMETERS["grid_power_total"]
+        # Response trägt die Identität von operation_mode, geparst wird aber als
+        # grid_power_total → Index/Subindex passen nicht zusammen.
+        response = make_parameter_response([(sent, struct.pack('>I', 1234))])
+        result = parse_parameter_response(response, [("grid_power_total", expected)])
+        assert result["grid_power_total"] is None
+
     def test_missing_response_flag(self):
         data = bytearray(ETHERLYNX_HEADER_SIZE + 12)
         data[37] = Flag.SB  # No RESPONSE flag
@@ -530,17 +620,65 @@ class TestDanfossEtherLynx:
         mock_loop.create_datagram_endpoint.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_read_parameters_batch_no_response(self, make_ping_response):
-        """Batch ohne Antwort wird übersprungen, kein Fehler."""
-        make_ping_response("SER123")
+    async def test_send_receive_async_derives_validator_from_packet(self):
+        """_send_receive_async leitet den Korrelations-Validator aus dem Paket ab.
+
+        Der Validator muss die zur Transaktionsnummer/Message ID passende
+        Antwort akzeptieren und fremde Pakete ablehnen.
+        """
+        from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
         client = DanfossEtherLynx("192.168.1.100")
         client._inverter_serial = "SER123"
-        with patch.object(
-            client, "_send_receive_async",
-            AsyncMock(return_value=None)
-        ):
-            result = await client.read_parameters(["grid_power_total"])
-        assert result == {}
+
+        # Echtes Get-Parameters-Paket (≥52 Bytes) mit Transaktionsnummer 0x05.
+        packet = build_get_parameters_packet(
+            source_serial="HA_MASTER",
+            dest_serial="SER123",
+            parameters=[TLX_PARAMETERS["grid_power_total"]],
+            transaction_no=0x05,
+        )
+
+        captured = {}
+
+        async def fake_send(pkt, timeout, validate=None):
+            captured["validate"] = validate
+            return b"ok"
+
+        mock_protocol = MagicMock(spec=_EtherLynxProtocol)
+        mock_protocol.send_receive = AsyncMock(side_effect=fake_send)
+        with patch.object(client, "_get_connection", AsyncMock(return_value=mock_protocol)):
+            result = await client._send_receive_async(packet)
+
+        assert result == b"ok"
+        validate = captured["validate"]
+        assert validate is not None
+        # Passende Antwort (Response-Bit, Message ID 0x02, Transaktion 0x05).
+        good = bytearray(ETHERLYNX_HEADER_SIZE)
+        good[37] = Flag.RESPONSE
+        good[38] = 0x05
+        good[39] = MessageID.GET_SET_PARAMETER
+        assert validate(bytes(good)) is True
+        # Fremde Transaktionsnummer → abgelehnt.
+        bad = bytearray(good)
+        bad[38] = 0x06
+        assert validate(bytes(bad)) is False
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_read_parameters_batch_no_response_raises(self):
+        """Batch ohne Antwort scheitert laut (EtherLynxError) nach Retry.
+
+        Eine unvollständige Antwort darf nicht als erfolgreiche Aktualisierung
+        mit fehlenden Werten durchgehen.
+        """
+        client = DanfossEtherLynx("192.168.1.100")
+        client._inverter_serial = "SER123"
+        mock_send = AsyncMock(return_value=None)
+        with patch.object(client, "_send_receive_async", mock_send):
+            with pytest.raises(EtherLynxError):
+                await client.read_parameters(["grid_power_total"])
+        # Ein Retry: zweimal gesendet, bevor aufgegeben wird.
+        assert mock_send.await_count == 2
         await client.close()
 
     @pytest.mark.asyncio
@@ -717,33 +855,20 @@ class TestEtherLynxProtocolEdgeCases:
         protocol.connection_made(mock_transport)
         assert protocol.transport is mock_transport
 
-    def test_datagram_received_sets_future_result(self):
-        """datagram_received setzt das Future-Ergebnis."""
+    def test_datagram_received_enqueues_data(self):
+        """datagram_received puffert die Daten in der Queue."""
         from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
         protocol = _EtherLynxProtocol()
-        loop = asyncio.new_event_loop()
-        try:
-            future = loop.create_future()
-            protocol._response_future = future
-            protocol.datagram_received(b"response_data", ("192.168.1.1", 48004))
-            assert future.result() == b"response_data"
-        finally:
-            loop.close()
+        protocol.datagram_received(b"response_data", ("192.168.1.1", 48004))
+        assert protocol._queue.get_nowait() == b"response_data"
 
-    def test_error_received_sets_future_exception(self):
-        """error_received setzt die Exception am Future."""
+    def test_error_received_enqueues_exception(self):
+        """error_received puffert die Exception in der Queue."""
         from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
         protocol = _EtherLynxProtocol()
-        loop = asyncio.new_event_loop()
-        try:
-            future = loop.create_future()
-            protocol._response_future = future
-            exc = OSError("Network error")
-            protocol.error_received(exc)
-            with pytest.raises(OSError):
-                future.result()
-        finally:
-            loop.close()
+        exc = OSError("Network error")
+        protocol.error_received(exc)
+        assert protocol._queue.get_nowait() is exc
 
     @pytest.mark.asyncio
     async def test_send_receive_returns_data(self):
@@ -756,8 +881,7 @@ class TestEtherLynxProtocolEdgeCases:
 
         async def deliver_response():
             await asyncio.sleep(0)  # yield to let send_receive run
-            if protocol._response_future and not protocol._response_future.done():
-                protocol._response_future.set_result(b"response")
+            protocol.datagram_received(b"response", ("127.0.0.1", 48004))
 
         asyncio.ensure_future(deliver_response())
         result = await protocol.send_receive(b"request", timeout=1.0)
@@ -774,8 +898,7 @@ class TestEtherLynxProtocolEdgeCases:
 
         async def deliver_error():
             await asyncio.sleep(0)
-            if protocol._response_future and not protocol._response_future.done():
-                protocol._response_future.set_exception(OSError("network error"))
+            protocol.error_received(OSError("network error"))
 
         asyncio.ensure_future(deliver_error())
         result = await protocol.send_receive(b"request", timeout=1.0)
@@ -793,35 +916,31 @@ class TestEtherLynxProtocolEdgeCases:
         result = await protocol.send_receive(b"request", timeout=0.01)
         assert result is None
 
-    def test_datagram_received_when_future_already_done(self):
-        """datagram_received ignoriert Daten wenn Future bereits abgeschlossen."""
+    def test_datagram_received_buffers_multiple(self):
+        """datagram_received puffert mehrere Datagramme in Reihenfolge."""
         from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
         protocol = _EtherLynxProtocol()
-        loop = asyncio.new_event_loop()
-        try:
-            future = loop.create_future()
-            future.set_result(b"already done")
-            protocol._response_future = future
-            # Must not raise even though future is already resolved
-            protocol.datagram_received(b"late data", ("127.0.0.1", 48004))
-            assert future.result() == b"already done"
-        finally:
-            loop.close()
+        protocol.datagram_received(b"first", ("127.0.0.1", 48004))
+        protocol.datagram_received(b"second", ("127.0.0.1", 48004))
+        assert protocol._queue.get_nowait() == b"first"
+        assert protocol._queue.get_nowait() == b"second"
 
-    def test_error_received_when_future_already_done(self):
-        """error_received ignoriert Fehler wenn Future bereits abgeschlossen."""
+    @pytest.mark.asyncio
+    async def test_send_receive_drains_stale_queue(self):
+        """Veraltete Datagramme aus einem früheren Aufruf werden verworfen."""
         from custom_components.danfoss_tlx.etherlynx import _EtherLynxProtocol
         protocol = _EtherLynxProtocol()
-        loop = asyncio.new_event_loop()
-        try:
-            future = loop.create_future()
-            future.set_result(b"already done")
-            protocol._response_future = future
-            # Must not raise even though future is already resolved
-            protocol.error_received(OSError("too late"))
-            assert future.result() == b"already done"
-        finally:
-            loop.close()
+        protocol.transport = MagicMock()
+        # Stale-Datagramm aus einem „vorherigen" Aufruf vorab einreihen.
+        protocol.datagram_received(b"stale", ("127.0.0.1", 48004))
+
+        async def deliver_fresh():
+            await asyncio.sleep(0)
+            protocol.datagram_received(b"fresh", ("127.0.0.1", 48004))
+
+        asyncio.ensure_future(deliver_fresh())
+        result = await protocol.send_receive(b"req", timeout=1.0)
+        assert result == b"fresh"
 
 
 class TestParseValueEdgeCases:

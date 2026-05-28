@@ -157,6 +157,39 @@ class TestDanfossCoordinator:
             await coordinator._fetch_data()
 
     @pytest.mark.asyncio
+    async def test_async_shutdown_closes_client(self, mock_hass, mock_config_entry):
+        """async_shutdown schließt den Client und setzt ihn zurück (kein Leck)."""
+        coordinator = _make_coordinator(mock_hass, mock_config_entry)
+        mock_client = MagicMock()
+        mock_client.close = AsyncMock()
+        coordinator._client = mock_client
+
+        with patch(
+            "custom_components.danfoss_tlx.coordinator.DataUpdateCoordinator.async_shutdown",
+            AsyncMock(),
+        ) as mock_super_shutdown:
+            await coordinator.async_shutdown()
+
+        mock_super_shutdown.assert_awaited_once()
+        mock_client.close.assert_awaited_once()
+        assert coordinator._client is None
+
+    @pytest.mark.asyncio
+    async def test_async_shutdown_without_client(self, mock_hass, mock_config_entry):
+        """async_shutdown ist sicher, wenn kein Client geöffnet wurde."""
+        coordinator = _make_coordinator(mock_hass, mock_config_entry)
+        coordinator._client = None
+
+        with patch(
+            "custom_components.danfoss_tlx.coordinator.DataUpdateCoordinator.async_shutdown",
+            AsyncMock(),
+        ) as mock_super_shutdown:
+            await coordinator.async_shutdown()
+
+        mock_super_shutdown.assert_awaited_once()
+        assert coordinator._client is None
+
+    @pytest.mark.asyncio
     async def test_homeassistant_error_propagates_unchanged(self, mock_hass, mock_config_entry):
         """HomeAssistantError aus _fetch_data wird unverändert weitergegeben."""
         coordinator = _make_coordinator(mock_hass, mock_config_entry)

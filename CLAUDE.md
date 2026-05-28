@@ -43,15 +43,15 @@ Danfoss-TLX-2-HA/
 │           └── en.json              # English UI translations (config, exceptions, entities)
 ├── dashboards/
 │   └── danfoss-tlx-inverter.yaml    # Example Home Assistant dashboard
-├── tests/                           # pytest test suite (~169 tests, 95% coverage)
+├── tests/                           # pytest test suite (~208 tests, ~99% coverage)
 │   ├── __init__.py
 │   ├── conftest.py                  # Shared fixtures (mock_hass, mock_config_entry, etc.)
-│   ├── test_etherlynx.py            # Protocol library tests (~58 tests)
-│   ├── test_coordinator.py          # Coordinator tests (~10 tests)
-│   ├── test_sensor.py               # Sensor entity tests (~34 tests)
-│   ├── test_config_flow.py          # Config flow tests (~14 tests)
+│   ├── test_etherlynx.py            # Protocol library tests (~100 tests)
+│   ├── test_coordinator.py          # Coordinator tests (~16 tests)
+│   ├── test_sensor.py               # Sensor entity tests (~41 tests)
+│   ├── test_config_flow.py          # Config flow tests (~19 tests)
 │   ├── test_diagnostics.py          # Diagnostics platform tests (~9 tests)
-│   ├── test_init.py                 # Integration setup tests (~3 tests)
+│   ├── test_init.py                 # Integration setup tests (~6 tests)
 │   └── test_e2e_inverter.py         # E2E tests against real inverter (requires INVERTER_IP env var)
 ├── .github/
 │   ├── release-drafter.yml          # Release notes template + version resolver
@@ -89,7 +89,7 @@ All shared constants: `DOMAIN = "danfoss_tlx"`, `CONF_*` config keys, default va
 - `DanfossOptionsFlow` — edit poll interval and PV string count post-setup
 
 #### `coordinator.py`
-`DanfossCoordinator(DataUpdateCoordinator)` — polls the inverter on a configurable interval. Calls `DanfossEtherLynx.read_all()` natively async (no executor thread). Handles auto-discovery of serial on first connect, resets the client on consecutive failures so the next poll retriggers discovery. Logs WARNING on first failure and INFO on recovery (log-when-unavailable). Uses `HomeAssistantError` with translation keys for setup exceptions; `UpdateFailed` with a plain string for poll errors.
+`DanfossCoordinator(DataUpdateCoordinator)` — polls the inverter on a configurable interval. Calls `DanfossEtherLynx.read_all()` natively async (no executor thread). Handles auto-discovery of serial on first connect, resets the client on consecutive failures so the next poll retriggers discovery. Logs WARNING on first failure and INFO on recovery (log-when-unavailable). Uses `HomeAssistantError` with translation keys for setup exceptions; `UpdateFailed` with a plain string for poll errors. Overrides `async_shutdown()` to close the UDP endpoint on unload/reload (no socket leak); `async_unload_entry` awaits it.
 
 #### `sensor.py`
 - `DanfossSensor` — one per entry in `TLX_PARAMETERS`; omits PV string 3 sensors when `pv_strings == 2`
@@ -113,14 +113,16 @@ The EtherLynx protocol library. Self-contained inside the component package so H
 - `DataType` enum — 12 numeric data type variants (BOOLEAN, SIGNED32, UNSIGNED32, FLOAT, etc.)
 - `ParameterDef` dataclass — Descriptor for each inverter parameter: Danfoss parameter ID, unit, scale factor, HA `device_class`
 - `TLX_PARAMETERS` dict — Registry of ~50 readable inverter parameters keyed by a snake_case name (e.g. `grid_power_total`, `pv_voltage_1`)
-- `_EtherLynxProtocol` class — asyncio `DatagramProtocol` for non-blocking UDP communication; matches requests to responses via a `Future`
-- `DanfossEtherLynx` class — Async main client; uses `_EtherLynxProtocol` via `create_datagram_endpoint`; all public methods are `async def`
-- Module-level helpers: `build_ping_packet()`, `build_get_parameters_packet()`, `parse_ping_response()`, `parse_parameter_response()`
+- `_EtherLynxProtocol` class — asyncio `DatagramProtocol` for non-blocking UDP communication; buffers incoming datagrams in an `asyncio.Queue` and correlates responses to requests in `send_receive()` via an optional `validate` callback (drops non-matching/stale/duplicate packets, keeps waiting until timeout)
+- `DanfossEtherLynx` class — Async main client; uses `_EtherLynxProtocol` via `create_datagram_endpoint`; all public methods are `async def`. `_send_receive_async()` derives the correlation validator from the outgoing packet header. `read_parameters()` retries a batch once, then raises `EtherLynxError` if no response (fail-loud — a partial read never passes as a successful poll)
+- `EtherLynxError` exception — raised on communication failures (e.g. a parameter batch with no response after retry)
+- Module-level helpers: `build_ping_packet()`, `build_get_parameters_packet()`, `parse_ping_response()`, `parse_parameter_response()`, `_response_matches()`
 
 **Protocol notes:**
 - Fixed 52-byte header followed by variable payload
 - Parameter requests can be batched (multiple IDs in one packet)
 - Serial number must be included in the header after discovery
+- **Response correlation**: the inverter echoes the request transaction number (header byte 38) and message ID (byte 39) in its response (spec §6.4.2 example: request 0x4A → response 0x4A). Responses are matched on transaction number + message ID + response flag; `parse_parameter_response()` additionally verifies each value's echoed index/subindex against the request (defense against positional misalignment)
 
 #### `strings.json` / `translations/en.json`
 UI strings organized in three sections: `config` (config flow), `options` (options flow), `exceptions` (translated error messages), `entity` (sensor name translations for all 52 entities). `strings.json` is German (primary); `translations/en.json` is English.
@@ -229,7 +231,7 @@ When adding new parameters, follow this pattern exactly and include the Danfoss 
 
 ## Testing
 
-The project has a pytest-based test suite with ~169 tests and 95% code coverage.
+The project has a pytest-based test suite with ~208 tests and ~99% code coverage.
 
 ### Running tests
 ```bash
@@ -241,8 +243,8 @@ pytest --cov=custom_components.danfoss_tlx --cov-report=term-missing
 
 ### Test structure
 - **`tests/conftest.py`** — Shared fixtures: `mock_hass`, `mock_config_entry`, `sample_inverter_data`, `make_ping_response`, `make_parameter_response`, `_make_mock_client` (async context manager helper)
-- **`tests/test_etherlynx.py`** — Protocol library: packet building/parsing, socket mocking, registry validation (~87 tests)
-- **`tests/test_coordinator.py`** — DataUpdateCoordinator: discovery, serial handling, error recovery (~14 tests)
+- **`tests/test_etherlynx.py`** — Protocol library: packet building/parsing, response correlation, socket mocking, registry validation (~100 tests)
+- **`tests/test_coordinator.py`** — DataUpdateCoordinator: discovery, serial handling, error recovery, shutdown/cleanup (~16 tests)
 - **`tests/test_sensor.py`** — Sensor entities: value mapping, PV string filtering, device info (~34 tests)
 - **`tests/test_config_flow.py`** — Config/options flows: form rendering, connection testing, error handling (~19 tests)
 - **`tests/test_diagnostics.py`** — Diagnostics: config entry diagnostics, serial redaction, null data handling (~9 tests)

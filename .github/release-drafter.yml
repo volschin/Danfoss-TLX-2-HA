@@ -22,6 +22,14 @@ categories:
       - "refactor"
 change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
 change-title-escapes: '\<*_&'
+# Reine .github/-Änderungen (CI/Workflows) lösen keinen Release aus.
+# Der Autolabeler vergibt automatisch das Label, exclude-labels blendet es aus.
+exclude-labels:
+  - "skip-changelog"
+autolabeler:
+  - label: "skip-changelog"
+    files:
+      - ".github/**"
 version-resolver:
   major:
     labels:

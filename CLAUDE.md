@@ -268,7 +268,7 @@ Four GitHub Actions workflows run on pushes to `main` and on pull requests:
 | **Test & Lint** | `.github/workflows/test.yml` | Runs ruff linter and pytest (Python 3.11–3.13) |
 | **HACS Validation** | `.github/workflows/hacs.yml` | Validates HACS integration requirements (brand assets, manifest, etc.) |
 | **Hassfest** | `.github/workflows/hassfest.yml` | Validates HA integration manifest (key ordering, required fields) |
-| **Release Drafter** | `.github/workflows/release.yml` | Drafts release notes (on push to main) and autolabels PRs (on `pull_request`) |
+| **Release Drafter** | `.github/workflows/release.yml` | Auto-drafts release notes from merged PRs (push to main only) |
 
 ### Release Drafter labels
 PR labels control version bumping and changelog categories:
@@ -276,18 +276,6 @@ PR labels control version bumping and changelog categories:
 - `fix` / `bug` → "Bug Fixes" section, patch version bump
 - `chore` / `ci` / `refactor` → "Maintenance" section
 - `major` → major version bump
-- `skip-changelog` → excluded from release notes **and** the version resolver
-
-### Skipping releases for CI-only changes
-An **autolabeler** in `.github/release-drafter.yml` tags any PR whose changed files
-match `.github/**` with `skip-changelog`, which `exclude-labels` then drops from both
-the changelog and the version bump — so workflow/CI-only changes never trigger a release.
-The `release.yml` workflow runs on `pull_request` too (with `disable-releaser` set on PR
-events) so the label is applied while the PR is open and present at merge time. It uses
-plain `pull_request` (not `pull_request_target`), so fork PRs never receive secrets.
-
-> The `skip-changelog` label must exist in the repo (Release Drafter does not create
-> labels). A PR mixing `.github/**` with source changes is also excluded — keep those separate.
 
 ---
 

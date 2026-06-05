@@ -3,6 +3,11 @@ name: Release Drafter
 on:
   push:
     branches: [main]
+  # pull_request: nur fürs Autolabeling (.github/-only → skip-changelog).
+  # Kein _target, damit Fork-PRs keine Secrets erhalten.
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches: [main]
 
 permissions:
   contents: read
@@ -13,8 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: read
+      pull-requests: write
     steps:
       - uses: release-drafter/release-drafter@693d20e7c1ce1a81d3a41962f85914253b518449 # v7.3.1
+        with:
+          # Bei PR-Events nur Labels setzen, keinen Release-Entwurf erzeugen.
+          disable-releaser: ${{ github.event_name == 'pull_request' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

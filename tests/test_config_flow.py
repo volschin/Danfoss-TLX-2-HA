@@ -385,3 +385,43 @@ class TestDanfossOptionsFlow:
         """Sicherheitsnetz: DanfossOptionsFlow.config_entry darf keine eingepflanzte Property haben."""
         # config_entry kommt aus der HA-Basisklasse, nicht aus DanfossOptionsFlow oder Tests
         assert "config_entry" not in DanfossOptionsFlow.__dict__
+
+
+class TestPvStringsSchemaCoercion:
+    """Regression für Issue #27: PV-Strings-Auswahl aus dem Frontend kommt als String."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("raw, expected", [("2", 2), ("3", 3), (2, 2), (3, 3)])
+    async def test_user_schema_coerces_pv_strings(self, mock_hass, raw, expected):
+        """Das Schema des User-Flows muss String-Werte zu int casten (kein vol.In-Fehler)."""
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+        result = await flow.async_step_user(None)
+        schema = result["data_schema"]
+
+        validated = schema({CONF_INVERTER_IP: "192.168.1.100", CONF_PV_STRINGS: raw})
+        assert validated[CONF_PV_STRINGS] == expected
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("raw, expected", [("2", 2), ("3", 3)])
+    async def test_options_schema_coerces_pv_strings(self, mock_config_entry, raw, expected):
+        """Das Schema des Options-Flows muss String-Werte zu int casten."""
+        flow = _OptionsFlowForTest(mock_config_entry)
+        result = await flow.async_step_init(None)
+        schema = result["data_schema"]
+
+        validated = schema({CONF_SCAN_INTERVAL: 30, CONF_PV_STRINGS: raw})
+        assert validated[CONF_PV_STRINGS] == expected
+
+    @pytest.mark.asyncio
+    async def test_user_schema_rejects_invalid_pv_strings(self, mock_hass):
+        """Ungültige Werte (z. B. 4) müssen weiterhin abgelehnt werden."""
+        import voluptuous as vol
+
+        flow = DanfossConfigFlow()
+        flow.hass = mock_hass
+        result = await flow.async_step_user(None)
+        schema = result["data_schema"]
+
+        with pytest.raises(vol.Invalid):
+            schema({CONF_INVERTER_IP: "192.168.1.100", CONF_PV_STRINGS: "4"})

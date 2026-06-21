@@ -43,13 +43,13 @@ Danfoss-TLX-2-HA/
 │           └── en.json              # English UI translations (config, exceptions, entities)
 ├── dashboards/
 │   └── danfoss-tlx-inverter.yaml    # Example Home Assistant dashboard
-├── tests/                           # pytest test suite (~208 tests, ~99% coverage)
+├── tests/                           # pytest test suite (~217 tests, ~99% coverage)
 │   ├── __init__.py
 │   ├── conftest.py                  # Shared fixtures (mock_hass, mock_config_entry, etc.)
 │   ├── test_etherlynx.py            # Protocol library tests (~100 tests)
 │   ├── test_coordinator.py          # Coordinator tests (~16 tests)
 │   ├── test_sensor.py               # Sensor entity tests (~41 tests)
-│   ├── test_config_flow.py          # Config flow tests (~19 tests)
+│   ├── test_config_flow.py          # Config flow tests (~28 tests)
 │   ├── test_diagnostics.py          # Diagnostics platform tests (~9 tests)
 │   ├── test_init.py                 # Integration setup tests (~6 tests)
 │   └── test_e2e_inverter.py         # E2E tests against real inverter (requires INVERTER_IP env var)
@@ -231,7 +231,7 @@ When adding new parameters, follow this pattern exactly and include the Danfoss 
 
 ## Testing
 
-The project has a pytest-based test suite with ~208 tests and ~99% code coverage.
+The project has a pytest-based test suite with ~217 tests and ~99% code coverage.
 
 ### Running tests
 ```bash
@@ -246,7 +246,7 @@ pytest --cov=custom_components.danfoss_tlx --cov-report=term-missing
 - **`tests/test_etherlynx.py`** — Protocol library: packet building/parsing, response correlation, socket mocking, registry validation (~100 tests)
 - **`tests/test_coordinator.py`** — DataUpdateCoordinator: discovery, serial handling, error recovery, shutdown/cleanup (~16 tests)
 - **`tests/test_sensor.py`** — Sensor entities: value mapping, PV string filtering, device info (~34 tests)
-- **`tests/test_config_flow.py`** — Config/options flows: form rendering, connection testing, error handling (~19 tests)
+- **`tests/test_config_flow.py`** — Config/options flows: form rendering, connection testing, error handling (~28 tests)
 - **`tests/test_diagnostics.py`** — Diagnostics: config entry diagnostics, serial redaction, null data handling (~9 tests)
 - **`tests/test_init.py`** — Integration setup/unload, platform forwarding (~6 tests)
 - **`tests/test_e2e_inverter.py`** — End-to-end tests against a real inverter; skipped unless `INVERTER_IP` env var is set. Run with: `INVERTER_IP=x.x.x.x pytest tests/test_e2e_inverter.py -v -s`

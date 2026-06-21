@@ -67,7 +67,9 @@ class DanfossConfigFlow(ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_INVERTER_IP): str,
                 vol.Optional(CONF_INVERTER_SERIAL, default=""): str,
-                vol.Optional(CONF_PV_STRINGS, default=DEFAULT_PV_STRINGS): vol.In([2, 3]),
+                vol.Optional(
+                    CONF_PV_STRINGS, default=DEFAULT_PV_STRINGS
+                ): vol.All(vol.Coerce(int), vol.In([2, 3])),
                 vol.Optional(
                     CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
                 ): vol.All(int, vol.Range(min=5, max=3600)),
@@ -186,7 +188,7 @@ class DanfossOptionsFlow(OptionsFlow):
                         CONF_PV_STRINGS,
                         self.config_entry.data.get(CONF_PV_STRINGS, DEFAULT_PV_STRINGS),
                     ),
-                ): vol.In([2, 3]),
+                ): vol.All(vol.Coerce(int), vol.In([2, 3])),
             }
         )
 

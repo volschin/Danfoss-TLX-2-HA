@@ -506,9 +506,6 @@ def get_operation_mode_text(mode_id: int) -> str:
     return f"Unbekannt ({mode_id})"
 
 
-# Wird in danfoss_ha_bridge.py importiert
-OPERATION_MODES = {i: get_operation_mode_text(i) for i in range(90)}
-
 # Ereignis-/Fehlercodes basierend auf der Danfoss Dokumentation
 # Quelle: greenenergy-repair.com/blogs/errors/danfoss + Danfoss TLX User Guide
 EVENT_CODES: dict[int, str] = {

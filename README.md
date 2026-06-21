@@ -110,6 +110,62 @@ Die Integration ist vollständig mit dem HA Energy Dashboard kompatibel:
 - **Solarproduktion:** `sensor.danfoss_tlx_pro_netzleistung_gesamt` als Echtzeit-Leistung
 - **Tagesertrag:** `sensor.danfoss_tlx_pro_produktion_heute_log` als Tagesenergiezähler
 
+### Mehrere Wechselrichter
+
+Mehrere Danfoss-TLX-Wechselrichter werden als **separate Geräte** unterstützt — jeder Inverter wird über eine eigene Integrations-Instanz hinzugefügt (`single_config_entry: false`). Die Unterscheidung erfolgt über die Seriennummer (bzw. die IP-Adresse), sodass sich die Entitäten nicht überschneiden.
+
+<details>
+<summary>Zweiten Wechselrichter hinzufügen</summary>
+
+1. **Einstellungen** > **Geräte & Dienste** > **Integration hinzufügen**
+2. Nach „Danfoss TLX Pro" suchen
+3. IP-Adresse (und optional Seriennummer) des zweiten Inverters eingeben
+4. Der zweite Inverter erscheint als eigenständiges Gerät mit eigenem Entity-Prefix (z. B. `sensor.danfoss_tlx_pro_2_...`)
+
+</details>
+
+Die Integration fasst die Inverter **bewusst nicht** zu einem Gerät zusammen — die Summenbildung erfolgt nativ in Home Assistant. Drei Wege, um die Gesamtproduktion zu sehen:
+
+<details>
+<summary>Variante 1: Energy Dashboard (empfohlen)</summary>
+
+Im **Energy Dashboard** beide Inverter als Solarquelle hinzufügen — Home Assistant summiert die Erträge automatisch:
+
+1. **Einstellungen** > **Dashboards** > **Energie**
+2. Unter **Solarpaneele** > **Solarproduktion hinzufügen**
+3. Den Tagesertrag-Sensor **beider** Inverter eintragen (z. B. `sensor.danfoss_tlx_pro_produktion_heute_log` und `sensor.danfoss_tlx_pro_2_produktion_heute_log`)
+
+</details>
+
+<details>
+<summary>Variante 2: Gruppen-Sensor (Live-Gesamtleistung)</summary>
+
+Ein Helfer vom Typ **Gruppe** summiert die Echtzeit-Leistung beider Inverter:
+
+1. **Einstellungen** > **Geräte & Dienste** > **Helfer** > **Helfer erstellen**
+2. **Gruppe** > **Sensorgruppe** wählen
+3. Beide Leistungssensoren auswählen (`sensor.danfoss_tlx_pro_netzleistung_gesamt`, `sensor.danfoss_tlx_pro_2_netzleistung_gesamt`)
+4. Als Berechnungstyp **Summe** wählen
+
+</details>
+
+<details>
+<summary>Variante 3: Template-Sensor</summary>
+
+```yaml
+template:
+  - sensor:
+      - name: "PV Gesamtleistung (alle Inverter)"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ states('sensor.danfoss_tlx_pro_netzleistung_gesamt') | float(0)
+           + states('sensor.danfoss_tlx_pro_2_netzleistung_gesamt') | float(0) }}
+```
+
+</details>
+
 ### Beispiel-Automationen
 
 <details>

@@ -281,6 +281,11 @@ PR labels control version bumping and changelog categories:
 
 ## Development Notes
 
+- **Follow YAGNI ("You Aren't Gonna Need It")** — do not add code, parameters, helper methods, config keys, or abstractions until something actually uses them. No speculative API surface "for later", no premature generalization. Concretely:
+  - Don't add an unused function/method, a ctor parameter no caller overrides, or a config option nothing reads.
+  - Delete dead code on sight (symbols used nowhere, comments referencing files that don't exist).
+  - **Exception:** protocol-spec enums/constants (`Flag`, `DataType`, `MessageID`, module IDs) may include members that aren't called yet — they document the EtherLynx spec and serve as reference. Keep those even if unused.
+  - When unsure whether a speculative addition is wanted, ask rather than build it.
 - The project is intentionally kept dependency-light — avoid adding third-party packages unless essential.
 - The README is the primary user documentation and is written in German; keep it in sync with any behavioral changes.
 - The included PDF (`ComLynx and EtherLynx User Guide.pdf`) is the authoritative reference for all protocol details. Consult it before modifying packet structure.

@@ -92,6 +92,7 @@ Die Integration nutzt **Polling** über das EtherLynx-Protokoll (UDP). Der DataU
 
 ### Voraussetzungen
 
+- Home Assistant **2024.12.0** oder neuer
 - Inverter mit **Ethernet-Port** (Communication Board #8)
 - Netzwerkverbindung zwischen Home Assistant und Inverter (gleiches LAN/Subnetz)
 - Inverter muss eingeschaltet sein (Solarproduktion oder Standby mit Netzversorgung)

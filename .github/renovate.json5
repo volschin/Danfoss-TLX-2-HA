@@ -2,5 +2,16 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "local>olcond/renovate-config"
+  ],
+  "packageRules": [
+    {
+      "description": "Keep the minimum Home Assistant job on Python 3.12",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/test.yml"],
+      "matchDepTypes": ["uses-with"],
+      "matchDepNames": ["python"],
+      "matchCurrentValue": "3.12",
+      "enabled": false
+    }
   ]
 }

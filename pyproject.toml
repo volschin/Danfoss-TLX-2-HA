@@ -2,6 +2,9 @@
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
+[tool.ruff.lint]
+extend-select = ["E402"]
+
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",

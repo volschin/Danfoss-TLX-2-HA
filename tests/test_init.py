@@ -1,9 +1,14 @@
 """Tests für das Integration-Setup."""
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from custom_components.danfoss_tlx import async_setup_entry, async_unload_entry, PLATFORMS, _async_reload_entry
+from custom_components.danfoss_tlx import (
+    PLATFORMS,
+    _async_reload_entry,
+    async_setup_entry,
+    async_unload_entry,
+)
 
 
 class TestIntegrationSetup:

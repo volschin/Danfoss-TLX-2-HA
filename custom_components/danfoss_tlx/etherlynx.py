@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Danfoss EtherLynx Protocol - Python Implementation
 
@@ -19,9 +18,11 @@ import functools
 import json
 import logging
 import struct
+import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Callable
+from typing import Any, Self
 
 logger = logging.getLogger(__name__)
 
@@ -711,9 +712,7 @@ def _response_matches(
         return False
     if data[39] != (expected_message_id & 0xFF):
         return False
-    if data[38] != (expected_transaction & 0xFF):
-        return False
-    return True
+    return data[38] == (expected_transaction & 0xFF)
 
 
 def parse_ping_response(data: bytes) -> str | None:
@@ -1036,7 +1035,7 @@ class DanfossEtherLynx:
             self._transport = None
             self._protocol = None
 
-    async def __aenter__(self) -> "DanfossEtherLynx":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *args: object) -> None:
@@ -1283,4 +1282,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

@@ -1,21 +1,21 @@
 """Gemeinsame Test-Fixtures für Danfoss TLX Pro Tests."""
 import struct
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.danfoss_tlx.etherlynx import (
-    ETHERLYNX_HEADER_SIZE,
-    Flag,
-    MessageID,
-)
 from custom_components.danfoss_tlx.const import (
     CONF_INVERTER_IP,
     CONF_INVERTER_SERIAL,
     CONF_PV_STRINGS,
     CONF_SCAN_INTERVAL,
-    DEFAULT_SCAN_INTERVAL,
     DEFAULT_PV_STRINGS,
+    DEFAULT_SCAN_INTERVAL,
+)
+from custom_components.danfoss_tlx.etherlynx import (
+    ETHERLYNX_HEADER_SIZE,
+    Flag,
+    MessageID,
 )
 
 
@@ -133,7 +133,7 @@ def make_parameter_response():
 
     Args: Liste von (ParameterDef, raw_value_bytes) Tupeln.
     """
-    def _make(params_with_values: list, error_indices: set = None) -> bytes:
+    def _make(params_with_values: list, error_indices: set | None = None) -> bytes:
         if error_indices is None:
             error_indices = set()
 

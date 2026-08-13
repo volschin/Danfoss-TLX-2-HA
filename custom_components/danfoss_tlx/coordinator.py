@@ -11,11 +11,11 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
-    DOMAIN,
     CONF_INVERTER_IP,
     CONF_INVERTER_SERIAL,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
 )
 from .etherlynx import DanfossEtherLynx
 

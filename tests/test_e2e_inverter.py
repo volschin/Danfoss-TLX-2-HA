@@ -14,19 +14,20 @@ import asyncio
 import os
 import socket
 import struct
+
 import pytest
 
 from custom_components.danfoss_tlx.etherlynx import (
-    DanfossEtherLynx,
-    TLX_PARAMETERS,
-    ETHERLYNX_PORT,
-    ETHERLYNX_HEADER_SIZE,
     ETHERLYNX_DATA_OFFSET,
+    ETHERLYNX_HEADER_SIZE,
+    ETHERLYNX_PORT,
     MASTER_SERIAL,
+    TLX_PARAMETERS,
+    DanfossEtherLynx,
     Flag,
     MessageID,
-    build_ping_packet,
     build_get_parameters_packet,
+    build_ping_packet,
 )
 
 

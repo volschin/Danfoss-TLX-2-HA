@@ -9,9 +9,14 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, CONF_PV_STRINGS, DEFAULT_PV_STRINGS
+from .const import CONF_PV_STRINGS, DEFAULT_PV_STRINGS, DOMAIN
 from .coordinator import DanfossCoordinator
-from .etherlynx import TLX_PARAMETERS, get_operation_mode_text, get_event_text, ParameterDef
+from .etherlynx import (
+    TLX_PARAMETERS,
+    ParameterDef,
+    get_event_text,
+    get_operation_mode_text,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from . import DanfossTLXConfigEntry

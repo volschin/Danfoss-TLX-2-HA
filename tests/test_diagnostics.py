@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.danfoss_tlx.diagnostics import async_get_config_entry_diagnostics
 from custom_components.danfoss_tlx.const import (
     DEFAULT_PV_STRINGS,
     DEFAULT_SCAN_INTERVAL,
 )
+from custom_components.danfoss_tlx.diagnostics import async_get_config_entry_diagnostics
 
 
 @pytest.fixture

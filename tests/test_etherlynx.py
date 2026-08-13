@@ -1,31 +1,30 @@
 """Tests für das EtherLynx-Protokollmodul."""
 import asyncio
 import struct
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from custom_components.danfoss_tlx.etherlynx import (
-    ETHERLYNX_HEADER_SIZE,
     ETHERLYNX_DATA_OFFSET,
-    MessageID,
-    Flag,
-    DataType,
+    ETHERLYNX_HEADER_SIZE,
     MODULE_COMM_BOARD,
-    ParameterDef,
     TLX_PARAMETERS,
     DanfossEtherLynx,
-    _pad_serial,
-    _build_header,
-    _parse_value,
-    build_ping_packet,
-    build_get_parameters_packet,
-    parse_ping_response,
-    parse_parameter_response,
-    _response_matches,
+    DataType,
     EtherLynxError,
+    Flag,
+    MessageID,
+    ParameterDef,
+    _build_header,
+    _pad_serial,
+    _parse_value,
+    _response_matches,
+    build_get_parameters_packet,
+    build_ping_packet,
+    parse_parameter_response,
+    parse_ping_response,
 )
-
 
 # ============================================================================
 # _EtherLynxProtocol Tests
@@ -674,9 +673,10 @@ class TestDanfossEtherLynx:
         client = DanfossEtherLynx("192.168.1.100")
         client._inverter_serial = "SER123"
         mock_send = AsyncMock(return_value=None)
-        with patch.object(client, "_send_receive_async", mock_send):
-            with pytest.raises(EtherLynxError):
-                await client.read_parameters(["grid_power_total"])
+        with patch.object(client, "_send_receive_async", mock_send), pytest.raises(
+            EtherLynxError
+        ):
+            await client.read_parameters(["grid_power_total"])
         # Ein Retry: zweimal gesendet, bevor aufgegeben wird.
         assert mock_send.await_count == 2
         await client.close()
@@ -812,9 +812,10 @@ class TestDanfossEtherLynx:
 
         mock_loop = MagicMock()
         mock_loop.create_datagram_endpoint = AsyncMock(side_effect=fake_create_endpoint)
-        with patch("asyncio.get_running_loop", return_value=mock_loop):
-            with pytest.raises(RuntimeError, match="_protocol ist None"):
-                await client._get_connection()
+        with patch("asyncio.get_running_loop", return_value=mock_loop), pytest.raises(
+            RuntimeError, match="_protocol ist None"
+        ):
+            await client._get_connection()
         await client.close()
 
     @pytest.mark.asyncio

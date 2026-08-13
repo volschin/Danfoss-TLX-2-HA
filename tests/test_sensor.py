@@ -2,19 +2,19 @@
 from unittest.mock import MagicMock
 
 import pytest
-
 from homeassistant.const import EntityCategory
-from custom_components.danfoss_tlx.const import DOMAIN, CONF_PV_STRINGS
+
+from custom_components.danfoss_tlx.const import CONF_PV_STRINGS, DOMAIN
 from custom_components.danfoss_tlx.etherlynx import TLX_PARAMETERS
 from custom_components.danfoss_tlx.sensor import (
-    async_setup_entry,
-    DanfossSensor,
-    DanfossOperationModeSensor,
-    DanfossEventSensor,
-    _device_info,
-    _OPTIONAL_SENSOR_KEYS,
     _DIAGNOSTIC_KEYS,
+    _OPTIONAL_SENSOR_KEYS,
     PARALLEL_UPDATES,
+    DanfossEventSensor,
+    DanfossOperationModeSensor,
+    DanfossSensor,
+    _device_info,
+    async_setup_entry,
 )
 
 

@@ -5,7 +5,6 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -19,13 +18,13 @@ except ImportError:
 from homeassistant.core import callback
 
 from .const import (
-    DOMAIN,
     CONF_INVERTER_IP,
     CONF_INVERTER_SERIAL,
     CONF_PV_STRINGS,
     CONF_SCAN_INTERVAL,
-    DEFAULT_SCAN_INTERVAL,
     DEFAULT_PV_STRINGS,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
 )
 from .etherlynx import DanfossEtherLynx
 

@@ -1,9 +1,8 @@
 """Tests für den DanfossCoordinator."""
 from datetime import timedelta
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
@@ -211,12 +210,11 @@ class TestDanfossCoordinator:
 
         with patch.object(
             coordinator, "_fetch_data", AsyncMock(side_effect=Exception("Timeout"))
-        ):
-            with patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
-                with pytest.raises(UpdateFailed):
-                    await coordinator._async_update_data()
-                mock_logger.warning.assert_called_once()
-                assert "192.168.1.100" in mock_logger.warning.call_args[0][1]
+        ), patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
+            with pytest.raises(UpdateFailed):
+                await coordinator._async_update_data()
+            mock_logger.warning.assert_called_once()
+            assert "192.168.1.100" in mock_logger.warning.call_args[0][1]
 
     @pytest.mark.asyncio
     async def test_no_repeated_warning_on_consecutive_failures(self, mock_hass, mock_config_entry):
@@ -226,11 +224,10 @@ class TestDanfossCoordinator:
 
         with patch.object(
             coordinator, "_fetch_data", AsyncMock(side_effect=Exception("Timeout"))
-        ):
-            with patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
-                with pytest.raises(UpdateFailed):
-                    await coordinator._async_update_data()
-                mock_logger.warning.assert_not_called()
+        ), patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
+            with pytest.raises(UpdateFailed):
+                await coordinator._async_update_data()
+            mock_logger.warning.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_info_logged_on_recovery(self, mock_hass, mock_config_entry):
@@ -241,10 +238,9 @@ class TestDanfossCoordinator:
         sample_data = {"grid_power_total": 1500.0}
         with patch.object(
             coordinator, "_fetch_data", AsyncMock(return_value=sample_data)
-        ):
-            with patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
-                result = await coordinator._async_update_data()
-                mock_logger.info.assert_called_once()
-                assert "192.168.1.100" in mock_logger.info.call_args[0][1]
+        ), patch("custom_components.danfoss_tlx.coordinator._LOGGER") as mock_logger:
+            result = await coordinator._async_update_data()
+            mock_logger.info.assert_called_once()
+            assert "192.168.1.100" in mock_logger.info.call_args[0][1]
 
         assert result == sample_data

@@ -1,15 +1,18 @@
 """Tests für den Config Flow."""
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from custom_components.danfoss_tlx.config_flow import (
+    DanfossConfigFlow,
+    DanfossOptionsFlow,
+)
 from custom_components.danfoss_tlx.const import (
     CONF_INVERTER_IP,
     CONF_INVERTER_SERIAL,
     CONF_PV_STRINGS,
     CONF_SCAN_INTERVAL,
 )
-from custom_components.danfoss_tlx.config_flow import DanfossConfigFlow, DanfossOptionsFlow
 
 
 def _make_mock_client(discover_return="SER_FOUND", read_return=None):
